@@ -1,12 +1,3 @@
-// ==UserScript==
-// @name         Enhance
-// @namespace    http://tampermonkey.net/
-// @version      1.9
-// @description  Adds color correction progress and makes the list overall more compact
-// @match        https://madame.ynap.biz/worklist/*
-// @grant        none
-// ==/UserScript==
-
 (function () {
     'use strict';
 

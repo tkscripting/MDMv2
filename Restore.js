@@ -15,7 +15,7 @@
     const SCROLL_KEY = 'scrollPos_' + location.pathname;
     const SELECTOR = '.MuiBox-root.css-o744zt';
     const RETRY_INTERVAL = 300;
-    const MAX_ATTEMPTS = 30;
+    const MAX_ATTEMPTS = 100;
 
     let restoreDone = false;
 

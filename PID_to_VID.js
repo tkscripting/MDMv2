@@ -1,14 +1,3 @@
-// ==UserScript==
-// @name         PID to VID
-// @namespace    https://madame.ynap.biz/
-// @version      1.1
-// @description  Auto-converts pasted PIDs to VIDs using
-// @author       Tyler
-// @match        https://madame.ynap.biz/*
-// @grant        none
-// @run-at       document-end
-// ==/UserScript==
-
 (function () {
     'use strict';
 

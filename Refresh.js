@@ -1,13 +1,3 @@
-// ==UserScript==
-// @name         Refresh
-// @namespace    http://tampermonkey.net/
-// @version      1.3
-// @description  Adds a Refresh button to research a search query
-// @author       Tyler
-// @match        https://madame.ynap.biz/*
-// @grant        none
-// ==/UserScript==
-
 (function () {
     'use strict';
 

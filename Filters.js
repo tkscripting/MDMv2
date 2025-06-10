@@ -1,12 +1,3 @@
-// ==UserScript==
-// @name         Filters
-// @namespace    http://tampermonkey.net/
-// @version      1.7.1
-// @description  Filters VIDs by name and color
-// @match        https://madame.ynap.biz/worklist/*
-// @grant        none
-// ==/UserScript==
-
 (function () {
     'use strict';
 

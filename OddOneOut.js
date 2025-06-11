@@ -1,3 +1,13 @@
+// ==UserScript==
+// @name         OddOneOut
+// @namespace    http://tampermonkey.net/
+// @version      1.8
+// @description  Color game with refined difficulty, adaptive scoring, and Firebase leaderboard on madame.ynap.biz
+// @author       You
+// @match        https://madame.ynap.biz/*
+// @grant        none
+// ==/UserScript==
+
 (function () {
     'use strict';
 

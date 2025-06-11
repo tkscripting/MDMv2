@@ -1,3 +1,13 @@
+// ==UserScript==
+// @name         Runway
+// @namespace    http://tampermonkey.net/
+// @version      1.1
+// @description  Alerts user by inserting a red message if "RUNWAY" or "LOOK" is found in descriptions
+// @author       Tyler
+// @match        https://madame.ynap.biz/worklist/*
+// @grant        none
+// ==/UserScript==
+
 (function () {
     'use strict';
 

@@ -1,3 +1,14 @@
+// ==UserScript==
+// @name         PID Adder
+// @namespace    http://tampermonkey.net/
+// @version      1.4
+// @description  Adds PIDs above VIDs
+// @author       Tyler
+// @match        https://madame.ynap.biz/*
+// @grant        none
+// @run-at       document-start
+// ==/UserScript==
+
 (function () {
     'use strict';
 

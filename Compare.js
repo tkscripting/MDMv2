@@ -1,3 +1,13 @@
+// ==UserScript==
+// @name         Compare
+// @namespace    http://tampermonkey.net/
+// @version      3.0
+// @description  Select up to 5 VIDs and opens a comparison tab with images
+// @author       Tyler
+// @match        https://madame.ynap.biz/worklist/*
+// @grant        none
+// ==/UserScript==
+
 (function() {
     'use strict';
 

@@ -1,3 +1,13 @@
+// ==UserScript==
+// @name         Confirm All
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Adds a "Confirm All" button that selects all checkboxes and clicks the complete button
+// @author       Tyler
+// @match        https://madame.ynap.biz/*
+// @grant        none
+// ==/UserScript==
+
 (function () {
     'use strict';
 

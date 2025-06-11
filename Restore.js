@@ -1,3 +1,14 @@
+// ==UserScript==
+// @name         Restore
+// @namespace    http://tampermonkey.net/
+// @version      3.4
+// @description  Reliably restores scroll position for Madame worklist
+// @author       Tyler
+// @match        https://madame.ynap.biz/worklist/*
+// @grant        none
+// @run-at       document-start
+// ==/UserScript==
+
 (function () {
     'use strict';
 

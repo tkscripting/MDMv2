@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Filters
 // @namespace    http://tampermonkey.net/
-// @version      1.7.1
-// @description  Filters VIDs by name and color
+// @version      1.7.3
+// @description  Filters VIDs by name and color (excludes video cell authors)
 // @match        https://madame.ynap.biz/worklist/*
 // @grant        none
 // ==/UserScript==
@@ -86,8 +86,19 @@
             const username = usernameEl ? usernameEl.textContent.trim().toLowerCase() : 'unknown';
 
             getOuterBoxes().forEach(box => {
-                const labels = box.querySelectorAll('[aria-label]');
-                const matched = Array.from(labels).some(el => el.getAttribute('aria-label')?.toLowerCase().includes(username));
+                const isVideo = box.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
+                if (isVideo) return;
+
+                const retoucherSpans = Array.from(box.querySelectorAll('.css-1ch8fxp[title*="Latest Retouched Author"]')).filter(el => {
+                    const isInVideo = el.closest('.css-hfakad')?.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
+                    return !isInVideo;
+                });
+
+                const matched = retoucherSpans.some(span => {
+                    const title = span.getAttribute('title');
+                    return title && title.toLowerCase().includes(username);
+                });
+
                 box.style.display = (!personalActive || matched) ? '' : 'none';
             });
         });
@@ -97,15 +108,17 @@
         const outerBoxesInit = getOuterBoxes();
 
         outerBoxesInit.forEach(outerBox => {
-            outerBox.querySelectorAll('.MuiBox-root.css-hfakad').forEach(innerBox => {
-                const containsVideo = innerBox.textContent.includes('Video');
-                if (containsVideo) return;
+            const isVideo = outerBox.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
+            if (isVideo) return;
 
-                const buttons = innerBox.querySelectorAll('.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeMedium.css-1n031t6');
-                if (buttons.length >= 2) {
-                    const aria = buttons[1].getAttribute('aria-label');
-                    const match = aria?.match(/Author\s+(.+?)\s+-/i);
-                    if (match && match[1]) nameSet.add(match[1].trim());
+            outerBox.querySelectorAll('.css-1ch8fxp[title*="Latest Retouched Author"]').forEach(authorEl => {
+                const isInVideo = authorEl.closest('.css-hfakad')?.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
+                if (isInVideo) return;
+
+                const title = authorEl.getAttribute('title');
+                const match = title.match(/Latest Retouched Author\s+(.+)\s+\d{1,2}\/\d{1,2}\/\d{4}/);
+                if (match && match[1]) {
+                    nameSet.add(match[1].trim());
                 }
             });
 
@@ -145,12 +158,20 @@
             }
 
             getOuterBoxes().forEach(outerBox => {
+                const isVideo = outerBox.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
+                if (isVideo) return;
+
                 let match = true;
 
                 if (type === 'retoucher' && selectedName) {
-                    match = Array.from(outerBox.querySelectorAll('.MuiBox-root.css-hfakad')).some(innerBox => {
-                        const buttons = innerBox.querySelectorAll('.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeMedium.css-1n031t6');
-                        return buttons.length >= 2 && buttons[1].getAttribute('aria-label')?.toLowerCase().includes(selectedName);
+                    const validSpans = Array.from(outerBox.querySelectorAll('.css-1ch8fxp[title*="Latest Retouched Author"]')).filter(el => {
+                        const isInVideo = el.closest('.css-hfakad')?.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
+                        return !isInVideo;
+                    });
+
+                    match = validSpans.some(el => {
+                        const title = el.getAttribute('title');
+                        return title && title.toLowerCase().includes(selectedName);
                     });
                 } else if (type === 'color' && selectedColor) {
                     const typoEls = outerBox.querySelectorAll('.MuiTypography-root.MuiTypography-body2.css-1pngg4p');

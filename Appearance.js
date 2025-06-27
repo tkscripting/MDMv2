@@ -1,23 +1,29 @@
 // ==UserScript==
 // @name         Appearance
 // @namespace    http://tampermonkey.net/
-// @version      3.0
-// @description  UI styling only (glassmorphism, colors, cleanup)
+// @version      3.2
+// @description  UI styling only (glassmorphism, colors, cleanup) with persistent dark mode
 // @match        https://madame.ynap.biz/*
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-function injectStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
+    // === LIGHT MODE BASE STYLES ===
+    function injectStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+/* ===== Base ===== */
 body {
     overflow-y: hidden !important;
 }
 
-/* Global glassmorphism bar */
+/* ===== App Bar ===== */
+.MuiAppBar-root.MuiAppBar-colorPrimary.MuiAppBar-positionStatic.css-1osjwd3 {
+    background: #fff !important;
+}
 .MuiAppBar-root.MuiAppBar-colorPrimary.MuiAppBar-positionRelative {
     background: rgba(255, 255, 255, 0.12) !important;
     backdrop-filter: blur(20px) saturate(180%) !important;
@@ -26,7 +32,10 @@ body {
     color: #222 !important;
 }
 
-/* Cards / modules */
+/* ===== Paper / Cards ===== */
+.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded {
+    border-radius: 18px !important;
+}
 .MuiBox-root.css-1rdqg8f .MuiPaper-root.MuiPaper-elevation2 {
     background: rgba(255, 255, 255, 0.12) !important;
     backdrop-filter: blur(20px) saturate(180%) !important;
@@ -35,13 +44,11 @@ body {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
     box-sizing: border-box;
 }
-
-/* Restore all rounded elevation paper elements */
-.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded {
+.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-1m9yl2a {
     border-radius: 18px !important;
 }
 
-/* Dialogs */
+/* ===== Dialogs ===== */
 .MuiDialog-paper {
     background: #fff !important;
     border-radius: 12px !important;
@@ -49,16 +56,7 @@ body {
     backdrop-filter: none !important;
 }
 
-/* Hide header bar */
-.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-ccvm9b {
-    display: none !important;
-}
-
-.MuiBox-root.css-7v0sgd {
-    background: transparent !important;
-}
-
-/* Filter pill style */
+/* ===== Chips / Pills ===== */
 .css-q5d465 {
     background: rgba(255, 255, 255, 0.12) !important;
     backdrop-filter: blur(20px) saturate(180%) !important;
@@ -66,19 +64,27 @@ body {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
-/* Ensure text/icons are visible */
+/* ===== Visibility / Typography Fixes ===== */
 .css-q5d465 *,
-.MuiAppBar-root * {
+.MuiAppBar-root *,
+.MuiPaper-root *,
+.MuiDialog-paper * {
     color: #222 !important;
     fill: #222 !important;
 }
-
-/* Specific known container */
-.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-1m9yl2a {
-    border-radius: 18px !important;
+.MuiSvgIcon-root.MuiSvgIcon-fontSizeSmall.css-ia1en0 {
+    color: #000 !important;
+    fill: #000 !important;
 }
 
-/* Main column layout */
+/* ===== Layout / Hidden ===== */
+.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-ccvm9b {
+    display: none !important;
+}
+.MuiBox-root.css-7v0sgd,
+.MuiBox-root.css-19xjdoc {
+    background: transparent !important;
+}
 .MuiBox-root.css-1g7m72v {
     display: flex !important;
     flex-direction: column;
@@ -91,27 +97,41 @@ body {
     padding: 0 !important;
     box-sizing: border-box;
 }
-    `;
-    document.head.appendChild(style);
+
+/* Target all 4 icons and force paths/circles inside to white */
+a#go-to-shooting-button svg *,
+a#go-to-shooting-validation-button svg *,
+a#go-to-retouching-button svg *,
+a#go-to-retouching-validation-button svg * {
+    fill: #fff !important;
+    color: #fff !important;
 }
+        `;
+        document.head.appendChild(style);
+    }
 
-    let darkMode = false;
+    // === DARK MODE TOGGLE ===
+    function toggleDarkMode(force = null) {
+        const existing = document.getElementById('dark-mode-styles');
+        const shouldEnable = force !== null ? force : !existing;
 
-function toggleDarkMode() {
-    darkMode = !darkMode;
+        if (!shouldEnable && existing) {
+            existing.remove();
+            GM_setValue('appearanceDarkMode', 'off');
+            return;
+        }
 
-    const existingDark = document.getElementById('dark-mode-styles');
-    if (existingDark) existingDark.remove();
-
-    if (darkMode) {
-        const style = document.createElement('style');
-        style.id = 'dark-mode-styles';
-        style.textContent = `
+        if (shouldEnable && !existing) {
+            const style = document.createElement('style');
+            style.id = 'dark-mode-styles';
+            style.textContent = `
+/* ===== Dark Mode: Base ===== */
 body {
     background: #1a1a1a !important;
     color: #eaeaea !important;
 }
 
+/* ===== Dark Mode: Paper & Cards ===== */
 .MuiAppBar-root,
 .MuiPaper-root,
 .MuiDialog-paper,
@@ -123,6 +143,37 @@ body {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
+/* AppBar override */
+.MuiAppBar-root.MuiAppBar-colorPrimary.MuiAppBar-positionStatic.css-1osjwd3 {
+    background: rgba(40, 40, 45, 0.75) !important;
+}
+
+/* Transparent areas */
+.MuiChip-root.MuiChip-filled.MuiChip-sizeMedium.MuiChip-colorDefault.MuiChip-filledDefault.css-1x53f8m,
+.MuiBox-root.css-19xjdoc,
+.MuiBox-root.css-1cf4usq,
+.MuiBox-root.css-1xa2jh3,
+.MuiButtonBase-root.Mui-disabled.MuiIconButton-root.Mui-disabled.MuiIconButton-sizeMedium.css-i0uwzg,
+.MuiBox-root.css-1fqp046,
+.MuiBox-root.css-13n36c,
+.MuiBox-root.css-6es26n,
+.MuiBox-root.css-n6y94z {
+    background: #242428 !important;
+}
+
+.MuiButtonBase-root.MuiTab-root.MuiTab-labelIcon.MuiTab-textColorPrimary.Mui-selected.css-1n33su5 {
+    background-color: #242428 !important;
+    color: #fff !important;
+}
+
+/* Inputs */
+input, textarea {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: #eaeaea !important;
+    border-radius: 6px !important;
+}
+
+/* Text/Icon visibility */
 .MuiAppBar-root *,
 .MuiPaper-root *,
 .MuiDialog-paper *,
@@ -130,44 +181,46 @@ body {
     color: #eaeaea !important;
     fill: #eaeaea !important;
 }
-
-input, textarea {
-    background-color: rgba(255, 255, 255, 0.05) !important;
-    color: #eaeaea !important;
-    border-radius: 6px !important;
+.MuiSvgIcon-root.MuiSvgIcon-fontSizeSmall.css-ia1en0 {
+    color: #fff !important;
+    fill: #fff !important;
 }
-        `;
-        document.head.appendChild(style);
-    }
-}
-
-
-    const interval = setInterval(() => {
-        if (document.getElementById('go-to-home-menu-button')) {
-            clearInterval(interval);
-            injectStyles();
+            `;
+            document.head.appendChild(style);
+            GM_setValue('appearanceDarkMode', 'on');
         }
-    }, 250);
+    }
 
-        const konamiCode = [
-        'ArrowUp', 'ArrowUp',
-        'ArrowDown', 'ArrowDown',
-        'ArrowLeft', 'ArrowRight',
-        'ArrowLeft', 'ArrowRight',
-        'b', 'a'
+    // === INITIAL INJECTION ON EVERY PAGE ===
+    const init = async () => {
+        injectStyles();
+        const saved = await GM_getValue('appearanceDarkMode', 'off');
+        if (saved === 'on') toggleDarkMode(true);
+    };
+    // Wait for head to exist
+    const checkHead = setInterval(() => {
+        if (document.head) {
+            clearInterval(checkHead);
+            init();
+        }
+    }, 50);
+
+    // === KONAMI CODE TOGGLE ===
+    const konami = [
+        'ArrowUp','ArrowUp','ArrowDown','ArrowDown',
+        'ArrowLeft','ArrowRight','ArrowLeft','ArrowRight',
+        'b','a'
     ];
-
-    let konamiIndex = 0;
-    window.addEventListener('keydown', (e) => {
-        if (e.key === konamiCode[konamiIndex]) {
-            konamiIndex++;
-            if (konamiIndex === konamiCode.length) {
+    let idx = 0;
+    window.addEventListener('keydown', e => {
+        if (e.key === konami[idx]) {
+            idx++;
+            if (idx === konami.length) {
                 toggleDarkMode();
-                konamiIndex = 0;
+                idx = 0;
             }
         } else {
-            konamiIndex = 0;
+            idx = 0;
         }
     });
-
 })();

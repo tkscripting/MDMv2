@@ -321,9 +321,19 @@ setTimeout(() => {
         if (savedState === 'on') {
             document.body.classList.add('enhance-enabled');
             toggleInput.checked = true;
-            addProgressBar();
-            hideEmptyHfakadIfNoImage();
-            setPrivateSwitchBaseInput(true);
+
+            const tryApplyEnhance = setInterval(() => {
+                const hasGrid = document.querySelector('.MuiGrid-root.MuiGrid-item.css-1g6ax51');
+                const hasProgressTarget = document.querySelector('.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-q5d465');
+                const hasImageCells = document.querySelectorAll('.MuiBox-root.css-hfakad').length > 0;
+
+                if (hasGrid && hasProgressTarget && hasImageCells) {
+                    clearInterval(tryApplyEnhance);
+                    addProgressBar();
+                    hideEmptyHfakadIfNoImage();
+                    setPrivateSwitchBaseInput(true);
+                }
+            }, 100);
         }
 
         toggleInput.addEventListener('change', function () {

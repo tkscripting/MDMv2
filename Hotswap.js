@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Hotswap
 // @namespace    http://tampermonkey.net/
-// @version      2.4
-// @description  Conviently switch between brands
+// @version      2.5
+// @description  Conveniently switch between brands
 // @match        https://madame.ynap.biz/*
 // @grant        none
 // @run-at       document-idle
@@ -11,9 +11,8 @@
 (function () {
     'use strict';
 
-    let mode = localStorage.getItem('hotswapMode') || 'button'; // 'button' or 'auto'
+    const MODE = 'auto'; // 🔄 Change to 'button' or 'auto'
     const BUTTON_ID = 'brandSwitchNoticeButton';
-    const MODE_TOGGLE_ID = 'hotswapModeToggleBtn';
     const TARGET_CLASS = 'MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation2 css-1tvp2se';
     const TARGET_TEXT = 'Worklist with no imported variants.';
 
@@ -52,151 +51,18 @@
                     console.log('6️⃣ Clicked Confirm');
 
                     setTimeout(() => {
-    console.log('7️⃣ Waiting for brand context to settle...');
-    sessionStorage.setItem('hotswapJustSwitched', 'true'); // prevent auto-loop
-    setTimeout(() => {
-        console.log('8️⃣ Restoring saved URL...');
-        window.location.href = savedUrl;
-        console.groupEnd();
-    }, 300); // 1 second buffer
-}, 100);
-
+                        console.log('7️⃣ Waiting for brand context to settle...');
+                        sessionStorage.setItem('hotswapJustSwitched', 'true'); // prevent auto-loop
+                        setTimeout(() => {
+                            console.log('8️⃣ Restoring saved URL...');
+                            window.location.href = savedUrl;
+                            console.groupEnd();
+                        }, 300);
+                    }, 100);
                 }, 100);
             }, 100);
         }, 100);
     }
-
-function createModeToggle() {
-    const existingToggle = document.getElementById(MODE_TOGGLE_ID);
-    if (existingToggle) {
-        const checkbox = existingToggle.querySelector('.hotswap-toggle-checkbox');
-        if (checkbox) checkbox.checked = (localStorage.getItem('hotswapMode') === 'auto');
-        return;
-    }
-
-    // Inject matching styles from Enhance toggle
-    const style = document.createElement('style');
-    style.textContent = `
-    .hotswap-toggle-wrapper {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-        border-radius: .5em;
-        padding: .125em;
-        background-image: linear-gradient(to bottom, #d5d5d5, #e8e8e8);
-        box-shadow: 0 1px 1px rgb(255 255 255 / .6);
-        transform: scale(0.75);
-        transform-origin: left center;
-        margin-right: 8px;
-    }
-
-    .hotswap-toggle-checkbox {
-        appearance: none;
-        position: absolute;
-        z-index: 1;
-        border-radius: inherit;
-        width: 100%;
-        height: 100%;
-        opacity: 0;
-        cursor: pointer;
-    }
-
-    .hotswap-toggle-container {
-        display: flex;
-        align-items: center;
-        position: relative;
-        border-radius: .375em;
-        width: 3em;
-        height: 1.5em;
-        background-color: #e8e8e8;
-        box-shadow: inset 0 0 .0625em .125em rgb(255 255 255 / .2),
-                    inset 0 .0625em .125em rgb(0 0 0 / .4);
-        transition: background-color .4s linear;
-    }
-
-    .hotswap-toggle-checkbox:checked + .hotswap-toggle-container {
-        background-color: #4caf50;
-    }
-
-    .hotswap-toggle-button {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        position: absolute;
-        left: .0625em;
-        border-radius: .3125em;
-        width: 1.375em;
-        height: 1.375em;
-        background-color: #e8e8e8;
-        box-shadow: inset 0 -.0625em .0625em .125em rgb(0 0 0 / .1),
-                    inset 0 -.125em .0625em rgb(0 0 0 / .2),
-                    inset 0 .1875em .0625em rgb(255 255 255 / .3),
-                    0 .125em .125em rgb(0 0 0 / .5);
-        transition: left .4s;
-    }
-
-    .hotswap-toggle-checkbox:checked + .hotswap-toggle-container .hotswap-toggle-button {
-        left: 1.5625em;
-    }
-
-    .hotswap-toggle-button-circles-container {
-        display: grid;
-        grid-template-columns: repeat(3, min-content);
-        gap: .125em;
-        position: absolute;
-        margin: 0 auto;
-    }
-
-    .hotswap-toggle-button-circle {
-        border-radius: 50%;
-        width: .125em;
-        height: .125em;
-        background-image: radial-gradient(circle at 50% 0, #f5f5f5, #c4c4c4);
-    }
-    `;
-    document.head.appendChild(style);
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'hotswap-toggle-wrapper';
-    wrapper.id = MODE_TOGGLE_ID;
-
-    const toggleInput = document.createElement('input');
-    toggleInput.type = 'checkbox';
-    toggleInput.className = 'hotswap-toggle-checkbox';
-    toggleInput.checked = (mode === 'auto');
-
-    const toggleContainer = document.createElement('div');
-    toggleContainer.className = 'hotswap-toggle-container';
-
-    const toggleButton = document.createElement('div');
-    toggleButton.className = 'hotswap-toggle-button';
-
-    const circleContainer = document.createElement('div');
-    circleContainer.className = 'hotswap-toggle-button-circles-container';
-
-    for (let i = 0; i < 12; i++) {
-        const circle = document.createElement('div');
-        circle.className = 'hotswap-toggle-button-circle';
-        circleContainer.appendChild(circle);
-    }
-
-    toggleButton.appendChild(circleContainer);
-    toggleContainer.appendChild(toggleButton);
-    wrapper.appendChild(toggleInput);
-    wrapper.appendChild(toggleContainer);
-
-    toggleInput.addEventListener('change', () => {
-        mode = toggleInput.checked ? 'auto' : 'button';
-        localStorage.setItem('hotswapMode', mode);
-        console.log(`🔄 Hotswap mode switched to: ${mode}`);
-    });
-
-    const settingsBtn = document.querySelector('.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-colorInherit.MuiIconButton-sizeMedium.css-fjrl3o');
-    if (settingsBtn && settingsBtn.parentElement) {
-        settingsBtn.parentElement.insertBefore(wrapper, settingsBtn);
-    }
-}
 
     function createAlertButton() {
         if (document.getElementById(BUTTON_ID)) return;
@@ -246,7 +112,7 @@ function createModeToggle() {
         }
 
         if (shouldTrigger) {
-            if (mode === 'auto') {
+            if (MODE === 'auto') {
                 const switchedFlag = sessionStorage.getItem('hotswapJustSwitched');
                 if (!switchedFlag) {
                     sessionStorage.setItem('hotswapJustSwitched', 'true');
@@ -257,7 +123,7 @@ function createModeToggle() {
             }
         } else {
             removeAlertButton();
-            sessionStorage.removeItem('hotswapJustSwitched'); // reset once page is valid again
+            sessionStorage.removeItem('hotswapJustSwitched');
         }
     }
 
@@ -265,12 +131,4 @@ function createModeToggle() {
     observer.observe(document.body, { childList: true, subtree: true });
 
     checkForTrigger();
-   const interval = setInterval(() => {
-    const settingsBtn = document.querySelector('.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-colorInherit.MuiIconButton-sizeMedium.css-fjrl3o');
-    if (settingsBtn && settingsBtn.parentElement && !document.getElementById(MODE_TOGGLE_ID)) {
-        createModeToggle();
-        clearInterval(interval);
-    }
-}, 300);
-
 })();

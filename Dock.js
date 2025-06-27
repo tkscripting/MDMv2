@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Dock
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  Removes the old, ugly sidebar, gives more space for the worklist, adds a dock that appears when the mouse is near, adds a quick return to all previously visited lists
+// @version      1.2
+// @description  Removes the old sidebar, gives more space, adds a floating dock to access key pages
 // @match        https://madame.ynap.biz/*
 // @grant        none
 // ==/UserScript==
@@ -19,8 +19,8 @@
     ];
 
     const SUB_UPLOAD_ITEMS = [
-        { id: 'go-to-bulkUploadOriginal-menu-button', label: 'Upload Original' },
-        { id: 'go-to-bulkUploadRetouching-menu-button', label: 'Upload Retouched' }
+        { id: 'go-to-bulkUploadOriginal-menu-button', label: 'Bulk Upload Original' },
+        { id: 'go-to-bulkUploadRetouching-menu-button', label: 'Bulk Upload Retouched' }
     ];
 
     function hideSidebar() {
@@ -172,132 +172,56 @@
         dock.appendChild(btn);
     }
 
-    function buildDock(dock, tooltip) {
-        const hasRetouching = !!document.getElementById('go-to-retouchingValidationVariants-menu-button');
-        const hasShooting  = !!document.getElementById('go-to-shootingValidation-menu-button');
+function buildDock(dock, tooltip) {
+    const hasRetouching = !!document.getElementById('go-to-retouchingValidationVariants-menu-button');
+    const hasShooting  = !!document.getElementById('go-to-shootingValidation-menu-button');
 
-        MENU_ITEMS.forEach(item => {
-            if (item.id === 'go-to-bulkDownload-menu-button' && (hasRetouching || hasShooting)) {
-                dock.appendChild(createDockDivider());
-            }
-            addDockButton(dock, tooltip, item);
-        });
+    let lastValidationBtn = null;
 
-        const bulkUpload = document.getElementById('go-to-bulkUpload-menu-button');
-        if (bulkUpload) {
-            bulkUpload.click();
-            setTimeout(() => {
-                SUB_UPLOAD_ITEMS.forEach(item => addDockButton(dock, tooltip, item));
-            }, 400);
+    MENU_ITEMS.forEach(item => {
+        // Add the main button
+        addDockButton(dock, tooltip, item);
+
+        // Track last validation button
+        if (item.id === 'go-to-retouchingValidationVariants-menu-button' && hasRetouching) {
+            lastValidationBtn = item.id;
+        }
+        if (item.id === 'go-to-shootingValidation-menu-button' && hasShooting) {
+            lastValidationBtn = item.id;
+        }
+
+        // Add first divider after search
+        if (item.id === 'go-to-search-menu-button') {
+            dock.appendChild(createDockDivider());
+        }
+    });
+
+    // === Insert second divider ===
+    if (lastValidationBtn) {
+        const lastBtn = dock.querySelector(`[data-id="${lastValidationBtn}"]`);
+        if (lastBtn && lastBtn.nextSibling) {
+            dock.insertBefore(createDockDivider(), lastBtn.nextSibling);
+        } else {
+            dock.appendChild(createDockDivider());
+        }
+    } else {
+        // Fallback: no validation buttons, put divider before Bulk Download
+        const bulkDownloadBtn = dock.querySelector('[data-id="go-to-bulkDownload-menu-button"]');
+        if (bulkDownloadBtn) {
+            dock.insertBefore(createDockDivider(), bulkDownloadBtn);
         }
     }
 
-    function addReturnButton(dock, tooltip) {
+    // Expand bulk upload menu and add those buttons
+    const bulkUpload = document.getElementById('go-to-bulkUpload-menu-button');
+    if (bulkUpload) {
+        bulkUpload.click();
         setTimeout(() => {
-            const returnBtn = document.createElement('button');
-            returnBtn.innerHTML = `
-<svg xmlns="http://www.w3.org/2000/svg"
-     width="22" height="22"
-     viewBox="0 0 24 24"
-     fill="none"
-     stroke="currentColor"
-     stroke-width="2.25"
-     stroke-linecap="round"
-     stroke-linejoin="round"
-     style="display: block;">
-  <path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"/>
-</svg>`;
-            returnBtn.className = 'dock-icon-wrapper';
-            returnBtn.setAttribute('data-id', 'return-worklist-history');
-
-            Object.assign(returnBtn.style, {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '48px',
-                height: '48px',
-                border: 'none',
-                borderRadius: '50%',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: '6px',
-                transition: 'transform 0.2s ease',
-            });
-
-            let hoverTimeout;
-
-            function showTooltip() {
-                clearTimeout(hoverTimeout);
-                const key = getHistoryKey();
-                const visits = JSON.parse(localStorage.getItem(key) || '[]');
-
-                if (visits.length === 0) {
-                    tooltip.textContent = 'No worklists visited yet';
-                } else {
-                    tooltip.innerHTML = `
-                        <div style="text-align:center; margin-bottom:6px;">
-                            <button id="clear-history-btn" style="
-                                background: transparent;
-                                border: none;
-                                color: white;
-                                font-weight: bold;
-                                cursor: pointer;
-                            ">Clear History</button>
-                        </div>
-                        ${visits.map(entry =>
-                            entry?.id ? `
-                            <div style="padding:2px 0;">
-                                <a href="/worklist/${entry.id}" style="color:white; text-decoration:none;" target="_blank">
-                                    ${entry.id}${entry.label ? ` – ${entry.label}` : ''}
-                                </a>
-                            </div>` : ''
-                        ).join('')}
-                    `;
-
-                    tooltip.querySelector('#clear-history-btn')?.addEventListener('click', () => {
-                        localStorage.removeItem(key);
-                        tooltip.innerHTML = 'History cleared.';
-                    });
-                }
-
-                tooltip.style.pointerEvents = 'auto';
-                tooltip.style.opacity = '1';
-
-                const rect = returnBtn.getBoundingClientRect();
-                tooltip.style.top = `${rect.top - 10 - tooltip.offsetHeight}px`;
-                tooltip.style.left = `${rect.left + rect.width / 2 - tooltip.offsetWidth / 2}px`;
-            }
-
-            function hideTooltip() {
-                hoverTimeout = setTimeout(() => {
-                    tooltip.style.opacity = '0';
-                    tooltip.style.pointerEvents = 'none';
-                }, 150);
-            }
-
-            returnBtn.addEventListener('mouseenter', () => {
-                returnBtn.style.transform = 'scale(1.25)';
-                showTooltip();
-            });
-
-            returnBtn.addEventListener('mouseleave', () => {
-                returnBtn.style.transform = 'scale(1)';
-                hideTooltip();
-            });
-
-            tooltip.addEventListener('mouseenter', () => clearTimeout(hoverTimeout));
-            tooltip.addEventListener('mouseleave', hideTooltip);
-
-            const searchBtn = dock.querySelector('[data-id="go-to-search-menu-button"]');
-            if (searchBtn && searchBtn.nextSibling) {
-                dock.insertBefore(returnBtn, searchBtn.nextSibling);
-                dock.insertBefore(createDockDivider(), returnBtn.nextSibling);
-            } else {
-                dock.appendChild(createDockDivider());
-                dock.appendChild(returnBtn);
-            }
-        }, 100);
+            SUB_UPLOAD_ITEMS.forEach(item => addDockButton(dock, tooltip, item));
+        }, 400);
     }
+}
+
 
     function setupDockReveal(dock, tooltip) {
         document.addEventListener('mousemove', e => {
@@ -320,55 +244,6 @@
         });
     }
 
-    function getHistoryKey() {
-        return 'visitedWorklists';
-    }
-
-function saveWorklistVisit(id) {
-    const key = getHistoryKey();
-    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-
-    if (existing.some(entry => entry.id === id)) {
-        console.log(`[Dock] ⏭ Already tracked: ${id}`);
-        return;
-    }
-
-    let attempts = 0;
-    const maxAttempts = 50;
-
-    const tryFetchLabel = () => {
-        const labelEl = document.querySelector('h6.MuiTypography-root[aria-label]');
-        const label = labelEl?.getAttribute('aria-label');
-
-        if (label && id) {
-            existing.push({ id, label });
-            localStorage.setItem(key, JSON.stringify(existing));
-            console.log(`[Dock] ✅ Tracked worklist: ${id} – ${label}`);
-        } else if (attempts < maxAttempts) {
-            attempts++;
-            setTimeout(tryFetchLabel, 300);
-        } else {
-            console.warn(`[Dock] ❌ Failed to grab label for worklist ${id} after ${maxAttempts} attempts.`);
-        }
-    };
-
-    tryFetchLabel();
-}
-
-
-    function setupHistoryTracker() {
-        let lastPath = '';
-        const observer = new MutationObserver(() => {
-            const path = window.location.pathname;
-            if (path !== lastPath && /^\/worklist\/\d+$/.test(path)) {
-                const id = path.split('/').pop();
-                saveWorklistVisit(id);
-                lastPath = path;
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-
     function init() {
         hideSidebar();
         injectDockStyles();
@@ -376,8 +251,6 @@ function saveWorklistVisit(id) {
         const dock = createDock(tooltip);
         buildDock(dock, tooltip);
         setupDockReveal(dock, tooltip);
-        setupHistoryTracker();
-        addReturnButton(dock, tooltip);
     }
 
     const interval = setInterval(() => {

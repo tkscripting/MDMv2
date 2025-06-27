@@ -100,7 +100,7 @@
             borderRadius: '24px',
             border: '1px solid rgba(255,255,255,0.3)',
             boxShadow: '0 0 12px rgba(255,255,255,0.25), 0 4px 20px rgba(0,0,0,0.3)',
-            transition: 'bottom 0.2s ease-in-out',
+            transition: 'bottom 400ms cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: '9999',
             pointerEvents: 'auto',
         });

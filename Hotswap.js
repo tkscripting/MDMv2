@@ -67,7 +67,12 @@
     }
 
 function createModeToggle() {
-    if (document.getElementById(MODE_TOGGLE_ID)) return;
+    const existingToggle = document.getElementById(MODE_TOGGLE_ID);
+    if (existingToggle) {
+        const checkbox = existingToggle.querySelector('.hotswap-toggle-checkbox');
+        if (checkbox) checkbox.checked = (localStorage.getItem('hotswapMode') === 'auto');
+        return;
+    }
 
     // Inject matching styles from Enhance toggle
     const style = document.createElement('style');

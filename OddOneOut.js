@@ -260,7 +260,7 @@ REPLAY
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(255, 255, 255, 0.15);
+    background: radial-gradient(ellipse at center, #1a1a1a 0%, #121212 100%);
     backdrop-filter: blur(12px);
     padding: 28px;
     border-radius: 24px;

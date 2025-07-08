@@ -200,9 +200,20 @@
         const digitSumCycle     = [10, 15, 19, 21, 23, 25];             // “Digits sum to X”
         const romanProductCycle = [6, 10, 12, 15, 18, 20, 24, 30, 35];  // “Roman numerals multiply to Y”
 
+        const TWO_DIGIT_PRIMES = [
+            '11','13','17','19','23','29','31','37','41','43',
+            '47','53','59','61','67','71','73','79','83','89','97'
+        ];
+
         function dailyIndex() {
             const msPerDay = 86_400_000;                 // 24 × 60 × 60 × 1000
             return Math.floor(Date.now() / msPerDay);    // days since Unix epoch
+        }
+
+        function productOfRomans(str) {
+            const chunks = str.match(/([IVXLCDM]+)/g) || [];
+            if (!chunks.length) return 0;               // show “0” until user types any numerals
+            return chunks.map(s => parseRoman(s)).reduce((a, b) => a * b, 1);
         }
 
         /* === helper: digit sum of a string === */
@@ -249,7 +260,7 @@
              .filter(i => i != null) },
             { id:6,  text:"Include a month of the year", check:p=>["january","february","march","april","may","june","july","august","september","october","november","december"].some(m=>p.toLowerCase().includes(m)), highlight:p=>{const low=p.toLowerCase(),mons=["january","february","march","april","may","june","july","august","september","october","november","december"],m=mons.find(x=>low.includes(x));if(!m)return[];const i=low.indexOf(m);return Array.from({length:m.length},(_,k)=>i+k);} },
             { id:7,  text:"Include a Roman numeral", check:p=>/[IVXLCDM]/.test(p), highlight:p=>[...p].map((c,i)=>/[IVXLCDM]/.test(c)?i:null).filter(i=>i!=null) },
-            { id:8,  text:"Include sponsor: TacoBell, Chilis, or McDonalds", check:p=>["tacobell","chilis","mcdonalds"].some(s=>p.toLowerCase().includes(s)), highlight:p=>{const low=p.toLowerCase(),arr=["pepsi","starbucks","shell"],f=arr.find(x=>low.includes(x));if(!f)return[];const i=low.indexOf(f);return Array.from({length:f.length},(_,k)=>i+k);} },
+            { id:8,  text:"Include sponsor: TacoBell, Chilis, or McDonalds", check:p=>["tacobell","chilis","mcdonalds"].some(s=>p.toLowerCase().includes(s)), highlight:p=>{const low=p.toLowerCase(),arr=["tacobell","chilis","mcdonalds"],f=arr.find(x=>low.includes(x));if(!f)return[];const i=low.indexOf(f);return Array.from({length:f.length},(_,k)=>i+k);} },
             { id: 9,
              text: `Roman numerals multiply to ${ROMAN_PROD}`,
              check: p => {
@@ -319,8 +330,22 @@
                 }
 
             },
-            { id:14, text:"Exactly two special characters.", check:p=>((p.match(/[!@#$%^&*(),.?":{}|<>]/g)||[]).length===2), highlight:p=>[...p].map((c,i)=>/[!@#$%^&*(),.?":{}|<>]/.test(c)?i:null).filter(i=>i!=null) },
-            { id:15, text:"Include a two-digit prime (11–97)", check:p=>['11','13','17','19','23','29','31','37','41','43','47','53','59','61','67','71','73','79','83','89','97'].some(pr=>p.includes(pr)), highlight:p=>{const primes=['11','13','17','19','23','29','31','37','41','43','47','53','59','61','67','71','73','79','83','89','97'],f=primes.find(x=>p.includes(x));if(!f)return[];const i=p.indexOf(f);return Array.from({length:f.length},(_,k)=>i+k);} },
+            { id:14, text:"Exactly two special characters", check:p=>((p.match(/[!@#$%^&*(),.?":{}|<>]/g)||[]).length===2), highlight:p=>[...p].map((c,i)=>/[!@#$%^&*(),.?":{}|<>]/.test(c)?i:null).filter(i=>i!=null) },
+            { id: 15,
+             text: "Include a two-digit prime (11–97)",
+             check: p => TWO_DIGIT_PRIMES.some(pr => p.includes(pr)),
+             highlight: p => {
+                 const out = [];
+                 TWO_DIGIT_PRIMES.forEach(pr => {
+                     let idx = p.indexOf(pr);
+                     while (idx !== -1) {
+                         out.push(idx, idx + 1);          // both digits
+                         idx = p.indexOf(pr, idx + 1);
+                     }
+                 });
+                 return out;
+             }
+            },
             { id:16, text:"Digit count must be even", check:p=>((p.match(/\d/g)||[]).length%2===0), highlight:p=>[...p].map((c,i)=>/\d/.test(c)?i:null).filter(i=>i!=null) },
             { id:17, text:"Include current hour (00–23)", check:p=>{const h=String(new Date().getHours()).padStart(2,'0');return p.includes(h);}, highlight:p=>{const h=String(new Date().getHours()).padStart(2,'0'),i=p.indexOf(h);return i>-1?[i,i+1]:[];} },
             { id:18, text:"No consecutive repeated characters", check:p=>!/(.)\1/.test(p), highlight:p=>{const m=p.match(/(.)(\1)/);return m?[m.index,m.index+1]:[];} },
@@ -524,8 +549,8 @@
       #rules-container::-webkit-scrollbar { display: none; }
       .btn {
         padding: 10px 16px;
-        display: block;
-        margin: 0 auto;
+        display: inline-block;
+        margin: 0 8px;
         border: none;
         border-radius: 8px;
         font-weight: 500;
@@ -596,34 +621,163 @@
             gameContent.innerHTML = `
       <div style="padding:16px;">
         <div id="password-input" contenteditable placeholder="Type your password…"></div>
-        <div style="text-align:right; margin-bottom:12px;">
-          <span id="char-count">0</span>
-        </div>
-        <button id="submit-score-btn" class="btn btn-primary">Submit Score</button>
-      </div>
-      <div id="rules-container" style="padding:0 16px 16px;"></div>
+<div style="text-align:right; margin-bottom:12px;">
+  <span id="char-count">0</span>
+</div>
+
+<div style="display:flex; justify-content:center; gap:8px; margin-bottom:12px;">
+  <button id="how-to-play-btn" class="btn btn-primary">How to Play</button>
+  <button id="submit-score-btn" class="btn btn-primary">Give Up</button>
+</div>
+
+<div id="rules-container" style="padding:0 16px 16px; text-align:left;"></div>
     `;
 
             passwordField   = document.getElementById('password-input');
+            // Prevent typing spaces
+            passwordField.addEventListener('keydown', e => {
+                if (e.key === ' ') e.preventDefault();
+            });
+
+            // Also strip any spaces if they somehow sneak in
+            passwordField.addEventListener('input', () => {
+                const noSpaces = passwordField.textContent.replace(/\s+/g, '');
+                if (passwordField.textContent !== noSpaces) {
+                    passwordField.textContent = noSpaces;
+                    // move caret to end
+                    const range = document.createRange();
+                    const sel   = window.getSelection();
+                    range.selectNodeContents(passwordField);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            });
             charCount       = document.getElementById('char-count');
             rulesContainer  = document.getElementById('rules-container');
 
             passwordField.addEventListener('input', onInput);
             passwordField.addEventListener('paste', onPaste);
             document.getElementById('submit-score-btn').addEventListener('click', ()=>showEndScreen(false));
+            document.getElementById('how-to-play-btn')
+                .addEventListener('click', showHowToPlayModal);
+
+            function showHowToPlayModal() {
+                // 1) backdrop
+                const overlay = document.createElement('div');
+                Object.assign(overlay.style, {
+                    position: 'fixed',
+                    top: 0, left: 0, width: '100%', height: '100%',
+                    background: 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 10002
+                });
+
+                // 2) modal box
+                const modal = document.createElement('div');
+                modal.className = 'glass-panel';
+                Object.assign(modal.style, {
+                    display: 'inline-block',
+                    padding: '24px',
+                    textAlign: 'left',
+                    maxWidth: '90vw',
+                    background: 'rgba(255,255,255,0.15)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: '16px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    color: '#111',
+                    fontFamily: 'Segoe UI, sans-serif'
+                });
+                // before this block, compute today's date:
+                const today = new Date();
+                const mmddyyyy = [
+                    String(today.getMonth() + 1).padStart(2, '0'),
+                    String(today.getDate()).padStart(2, '0'),
+                    today.getFullYear()
+                ].join('/');
+
+                modal.innerHTML = `
+  <h2 style="text-align:center; margin:0 0 16px;">How to Play ENCRPT</h2>
+<ul style="padding-left:20px; margin:0 0 16px;">
+  <li>Type a password that fulfills the rules</li>
+  <li>As new rules appear, earlier ones may become invalid—adjust your password until all rules are satisfied</li>
+  <li>Hover over any rule to see exactly which characters in your password it’s checking</li>
+  <li>Watch the live counters (length, digit‐sum, roman product) next to the rules for real-time feedback</li>
+  <li>Pasting is disabled—please type your password manually</li>
+  <li>No spaces are allowed in your password</li>
+</ul>
+
+  <h3 style="text-align:center; margin:0 0 8px;">Examples</h3>
+  <ul style="padding-left:20px; margin:0 0 16px;">
+    <li><strong>Include its length:</strong> <code>password9</code> (9 characters total)</li>
+    <li><strong>Include today's date:</strong> <code>${mmddyyyy}</code></li>
+    <li>
+  <strong>Roman numerals multiply to 15:</strong>
+  <code>V…III</code> (e.g. <code>VabcIII</code>, 5 × 3 = 15)
+</li>
+    <li><strong>Digit count must be even:</strong> <code>abc1234</code> (4 digits)</li>
+    <li><strong>Include a correct 1-digit math equation:</strong> <code>3+4=7</code></li>
+    <li><strong>Digits sum to 10:</strong> <code>19</code> (1 + 9 = 10)</li>
+  </ul>
+
+  <button id="close-htp" class="btn btn-primary" style="display:block; margin:0 auto;">
+    OK
+  </button>
+`;
+
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+
+                // 3) wire up close
+                modal.querySelector('#close-htp')
+                    .addEventListener('click', () => overlay.remove());
+            }
+
             document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeGame(); });
             gameContainer.addEventListener('click', e=>{ if(e.target===gameContainer) closeGame(); });
             passwordField.focus();
         }
 
-        function addNextRule(){
+        function addNextRule() {
             if (revealIndex >= todaysRules.length) return;
+
             const r = todaysRules[revealIndex++];
             activeRules.push(r);
+
             const w = document.createElement('div');
-            w.id = `rule-${r.id}`;
-            w.className = r.check(currentPassword) ? 'rule-card rule-valid' : 'rule-card rule-invalid';
-            w.textContent = r.text;
+            w.id        = `rule-${r.id}`;
+            w.className = r.check(currentPassword) ? 'rule-card rule-valid'
+            : 'rule-card rule-invalid';
+
+            /* main label */
+            const label = document.createElement('span');
+            label.textContent = r.text;
+            w.appendChild(label);
+
+            /* live counters */
+            if (r.id === 5) {
+                const sum = document.createElement('span');
+                sum.className = 'digit-sum-live';
+                sum.style.cssText = 'float:right;opacity:.7;font-weight:bold;';
+                sum.textContent   = `(${sumDigits(currentPassword)})`;
+                w.appendChild(sum);
+            } else if (r.id === 9) {
+                const prod = document.createElement('span');
+                prod.className = 'roman-prod-live';
+                prod.style.cssText = 'float:right;opacity:.7;font-weight:bold;';
+                prod.textContent   = `(${productOfRomans(currentPassword)})`;
+                w.appendChild(prod);
+            }
+
+            /* tooltip + hover highlighting for primes */
+            if (r.id === 15) {
+                w.title = TWO_DIGIT_PRIMES.join(', ');         // native tooltip
+            }
+
+            /* hover-to-highlight */
+            w.addEventListener('mouseenter', () => renderInput(r));
+            w.addEventListener('mouseleave', () => renderInput());
+
             rulesContainer.prepend(w);
             updateStatuses();
             renderInput();
@@ -643,12 +797,22 @@
             activeRules.forEach(r=>{
                 const el = document.getElementById(`rule-${r.id}`);
                 if (el) el.className = `rule-card ${r.check(currentPassword)?'rule-valid':'rule-invalid'}`;
+                if (r.id === 5) {
+                    const sumEl = el.querySelector('.digit-sum-live');
+                    if (sumEl) sumEl.textContent = `(${sumDigits(currentPassword)})`;
+                }
+                if (r.id === 9) {
+                    const prodEl = el.querySelector('.roman-prod-live');
+                    if (prodEl) prodEl.textContent = `(${productOfRomans(currentPassword)})`;
+                }
             });
         }
-        function renderInput(){
+        function renderInput(hoverRule = null){
             const cp = getCaretOffset(passwordField);
             const wrong = activeRules.filter(r=>!r.check(currentPassword));
-            let idxs = wrong.length===1 ? wrong[0].highlight(currentPassword) : [];
+            let idxs = hoverRule
+            ? hoverRule.highlight(currentPassword)
+            : (wrong.length === 1 ? wrong[0].highlight(currentPassword) : []);
             const chars = [...currentPassword];
             passwordField.innerHTML = chars.map((c,i)=> idxs.includes(i) ? `<span class="char-highlight">${c}</span>` : c ).join('');
             setCaretOffset(passwordField, cp);

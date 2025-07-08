@@ -561,7 +561,6 @@
       .btn-primary {
         background: rgba(30, 144, 255, 0.9);
         color: #fff;
-        box-shadow: 0 4px 12px rgba(30,144,255,0.6);
       }
       #password-input {
         background: rgba(255, 255, 255, 0.4);

@@ -13,11 +13,11 @@
     
     // Exit early if we're on the shooting-validation page
     if (window.location.pathname === '/shooting-validation') {
-        console.log('Active userscript: Skipped on shooting-validation page');
+        console.log('[Active] Skipped on shooting-validation page');
         return;
     }
     
-    console.log('Active userscript: Running IntersectionObserver override');
+    console.log('[Active] Running IntersectionObserver override');
     
     const observed = new WeakSet();
     window.IntersectionObserver = class {

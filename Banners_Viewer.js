@@ -10,7 +10,6 @@
 
 (function () {
   'use strict';
-  console.log('[Banner]', 'init');
 
   // ────────────────────────────────────────────────────────────────
   // 1)  Load Firebase compat libs if missing

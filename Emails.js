@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Generate Email
+// @name         Emails
 // @namespace    https://madame.ynap.biz/
 // @version      3.12
 // @description  Adds "Generate Email" button to validation page, creates a formatted clipboard to paste into emails

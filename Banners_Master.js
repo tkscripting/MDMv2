@@ -58,7 +58,7 @@
         wrap.style.cssText = [
             'width:100%', 'background:transparent', 'color:#000',
             'padding:8px 12px','box-sizing:border-box',
-            'display:flex','justify-content:space-between','align-items:center',
+            'display:flex','justify-content:center','align-items:center','text-align:center',
             'z-index:9999','user-select:none'
         ].join(';');
         wrap.dataset.link = '';

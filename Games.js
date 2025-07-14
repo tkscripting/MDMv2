@@ -13,16 +13,17 @@
     // --- SHARED FIREBASE SETUP ---
     const firebaseScripts = [
         'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+        'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
         'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'
     ];
+
     const firebaseConfig = {
-        apiKey: "AIzaSyAXRJJZrRZVyrQzjGT_kXoMDJ23julYkIQ",
-        authDomain: "ooog-5c3c1.firebaseapp.com",
-        projectId: "ooog-5c3c1",
-        storageBucket: "ooog-5c3c1.firebasestorage.app",
-        messagingSenderId: "857590797309",
-        appId: "1:857590797309:web:4de7faebc9882641427f94",
-        measurementId: "G-5S5283GD9C"
+        apiKey: "AIzaSyB47ckpUatftA4EN8zKrP9qewwSCWIYHTQ",
+        authDomain: "gotgames-15f31.firebaseapp.com",
+        projectId: "gotgames-15f31",
+        storageBucket: "gotgames-15f31.firebasestorage.app",
+        messagingSenderId: "221607163617",
+        appId: "1:221607163617:web:900289395962aad01629a0"
     };
 
     let db;
@@ -80,11 +81,19 @@
     }
 
     loadScripts(firebaseScripts, () => {
+        // 1) initialize
         firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        firebaseReady = true;
-        firebaseCallbacks.forEach(cb => cb(db));
-        firebaseCallbacks.length = 0;
+
+        // 2) sign in anonymously
+        firebase.auth().signInAnonymously()
+            .catch(err => console.error('❌ auth error', err))
+            .finally(() => {
+            // 3) once (anon) auth is done, wire up Firestore
+            db = firebase.firestore();
+            firebaseReady = true;
+            firebaseCallbacks.forEach(cb => cb(db));
+            firebaseCallbacks.length = 0;
+        });
     });
 
     // --- HELPER: name-click menu launcher ---
@@ -215,7 +224,7 @@
             ANIMATION_DURATION: 300,
             CLICK_DELAY: 100,
             MAX_VARIANCE: 65,
-            MIN_VARIANCE: 8,
+            MIN_VARIANCE: 12,
             VARIANCE_REDUCTION: 1.8,
             COLOR_RANGES: {
                 HUE: { min: 0, max: 360 },
@@ -274,33 +283,23 @@
                 return `hsl(${h}, ${s}%, ${l}%)`;
             },
 
+            // inside Utils:
             generateVariantColor(baseColor, difficulty) {
-                const hsl = this.parseHSL(baseColor);
-                const variance = Math.max(CONFIG.MIN_VARIANCE, CONFIG.MAX_VARIANCE - difficulty * CONFIG.VARIANCE_REDUCTION);
+                // linear mapping of difficulty [1–20] to variance [MAX_VARIANCE–MIN_VARIANCE]
+                const { MIN_VARIANCE, MAX_VARIANCE } = CONFIG;
+                const maxRound = 20;
+                const t = Math.min(difficulty / maxRound, 1);
+                const variance = MAX_VARIANCE - t * (MAX_VARIANCE - MIN_VARIANCE);
 
-                let h, s, l;
+                const { h, s, l } = this.parseHSL(baseColor);
+                // random offset in range [-variance/2, +variance/2]
+                const offset = () => Math.random() * variance - variance / 2;
 
-                if (difficulty <= 4) {
-                    h = (hsl.h + (Math.random() * variance * 1.6 - variance * 0.8) + 360) % 360;
-                    s = Math.max(20, Math.min(100, hsl.s + (Math.random() * variance * 0.9 - variance * 0.45)));
-                    l = Math.max(20, Math.min(80, hsl.l + (Math.random() * variance * 0.9 - variance * 0.45)));
-                } else if (difficulty <= 10) {
-                    h = (hsl.h + (Math.random() * variance * 1.3 - variance * 0.65) + 360) % 360;
-                    s = Math.max(25, Math.min(100, hsl.s + (Math.random() * variance * 0.8 - variance * 0.4)));
-                    l = Math.max(25, Math.min(80, hsl.l + (Math.random() * variance * 0.8 - variance * 0.4)));
-                } else if (difficulty <= 18) {
-                    h = (hsl.h + (Math.random() * variance - variance * 0.5) + 360) % 360;
-                    s = Math.max(30, Math.min(95, hsl.s + (Math.random() * variance * 0.7 - variance * 0.35)));
-                    l = Math.max(30, Math.min(75, hsl.l + (Math.random() * variance * 0.7 - variance * 0.35)));
-                } else {
-                    h = (hsl.h + (Math.random() * variance * 0.6 - variance * 0.3) + 360) % 360;
-                    const satVariance = variance * 0.7;
-                    const lightVariance = variance * 0.8;
-                    s = Math.max(35, Math.min(90, hsl.s + (Math.random() * satVariance - satVariance/2)));
-                    l = Math.max(35, Math.min(70, hsl.l + (Math.random() * lightVariance - lightVariance/2)));
-                }
+                const newH = (h + offset() + 360) % 360;
+                const newS = Math.max(0, Math.min(100, s + offset()));
+                const newL = Math.max(0, Math.min(100, l + offset()));
 
-                return `hsl(${h}, ${s}%, ${l}%)`;
+                return `hsl(${Math.round(newH)}, ${Math.round(newS)}%, ${Math.round(newL)}%)`;
             },
 
             shuffleArray(array) {
@@ -311,60 +310,60 @@
                 return array;
             },
 
-            calculateOptimalTileSize(gridSize) {
-                const containerPadding = 56;
-                const availableWidth = window.innerWidth - (CONFIG.GRID_PADDING * 2 * CONFIG.TILE_MARGIN);
-                const availableHeight = window.innerHeight - containerPadding - (CONFIG.GRID_PADDING * 2 * CONFIG.TILE_MARGIN);
+                calculateOptimalTileSize(gridSize) {
+                    const containerPadding = 56;
+                    const availableWidth = window.innerWidth - (CONFIG.GRID_PADDING * 2 * CONFIG.TILE_MARGIN);
+                    const availableHeight = window.innerHeight - containerPadding - (CONFIG.GRID_PADDING * 2 * CONFIG.TILE_MARGIN);
 
-                const maxTileWidth = Math.floor((availableWidth - (gridSize - 1) * CONFIG.TILE_GAP) / gridSize);
-                const maxTileHeight = Math.floor((availableHeight - (gridSize - 1) * CONFIG.TILE_GAP) / gridSize);
+                    const maxTileWidth = Math.floor((availableWidth - (gridSize - 1) * CONFIG.TILE_GAP) / gridSize);
+                    const maxTileHeight = Math.floor((availableHeight - (gridSize - 1) * CONFIG.TILE_GAP) / gridSize);
 
-                const maxSize = Math.min(maxTileWidth, maxTileHeight);
-                return Math.max(40, Math.min(maxSize, 100));
-            },
+                    const maxSize = Math.min(maxTileWidth, maxTileHeight);
+                    return Math.max(40, Math.min(maxSize, 100));
+                },
 
-            debounce(func, wait) {
-                let timeout;
-                return function executedFunction(...args) {
-                    const later = () => {
-                        clearTimeout(timeout);
-                        func(...args);
-                    };
-                    clearTimeout(timeout);
-                    timeout = setTimeout(later, wait);
-                };
-            }
-        };
+                    debounce(func, wait) {
+                        let timeout;
+                        return function executedFunction(...args) {
+                            const later = () => {
+                                clearTimeout(timeout);
+                                func(...args);
+                            };
+                            clearTimeout(timeout);
+                            timeout = setTimeout(later, wait);
+                        };
+                    }
+    };
 
-        // --- GAME LOGIC ---
-        const GameLogic = {
-            calculateGridSize(round) {
-                if (round <= 2) return 2;
-                if (round <= 4) return 3;
-                if (round <= 7) return 4;
-                if (round <= 11) return 5;
-                return Math.min(6, CONFIG.MAX_GRID_SIZE);
-            },
+     // --- GAME LOGIC ---
+     const GameLogic = {
+     calculateGridSize(round) {
+        if (round <= 2) return 2;
+        if (round <= 4) return 3;
+        if (round <= 7) return 4;
+        if (round <= 11) return 5;
+        return Math.min(6, CONFIG.MAX_GRID_SIZE);
+    },
 
-            generateRoundData(round) {
-                const gridSize = this.calculateGridSize(round);
-                const tileCount = gridSize * gridSize;
+        generateRoundData(round) {
+            const gridSize = this.calculateGridSize(round);
+            const tileCount = gridSize * gridSize;
 
-                const baseColor = Utils.generateRandomColor();
-                const oddColor = Utils.generateVariantColor(baseColor, round);
+            const baseColor = Utils.generateRandomColor();
+            const oddColor = Utils.generateVariantColor(baseColor, round);
 
-                const colorArray = new Array(tileCount - 1).fill(baseColor);
-                colorArray.push(oddColor);
+            const colorArray = new Array(tileCount - 1).fill(baseColor);
+            colorArray.push(oddColor);
 
-                Utils.shuffleArray(colorArray);
+            Utils.shuffleArray(colorArray);
 
-                return {
-                    colors: colorArray,
-                    gridSize,
-                    oddColor,
-                    baseColor
-                };
-            },
+            return {
+                colors: colorArray,
+                gridSize,
+                oddColor,
+                baseColor
+            };
+        },
 
             calculateScore(timeTaken, round) {
                 const timeScore = Math.max(0, CONFIG.MAX_SCORE_PER_ROUND - (timeTaken / CONFIG.TIME_PENALTY_DIVISOR));
@@ -372,18 +371,18 @@
                 return Math.floor(Math.max(CONFIG.MIN_SCORE, timeScore * multiplier));
             },
 
-            isCorrectTile(clickedColor, oddColor) {
-                return clickedColor === oddColor;
-            }
-        };
+                isCorrectTile(clickedColor, oddColor) {
+                    return clickedColor === oddColor;
+                }
+};
 
-        // --- UI MANAGEMENT ---
-        const UI = {
-            createGameContainer() {
-                const container = document.createElement('div');
-                container.className = 'chromakey-game-container';
+ // --- UI MANAGEMENT ---
+ const UI = {
+ createGameContainer() {
+    const container = document.createElement('div');
+    container.className = 'chromakey-game-container';
 
-                container.style.cssText = `
+    container.style.cssText = `
                     position: fixed;
                     top: 50%;
                     left: 50%;
@@ -406,15 +405,15 @@
                     box-sizing: border-box;
                 `;
 
-                return container;
-            },
+    return container;
+},
 
-            createTileGrid(colors, gridSize, oddColor) {
-                const tileSize = Utils.calculateOptimalTileSize(gridSize);
-                gameState.currentGridSize = gridSize;
+    createTileGrid(colors, gridSize, oddColor) {
+        const tileSize = Utils.calculateOptimalTileSize(gridSize);
+        gameState.currentGridSize = gridSize;
 
-                const gridContainer = document.createElement('div');
-                gridContainer.style.cssText = `
+        const gridContainer = document.createElement('div');
+        gridContainer.style.cssText = `
                     display: grid;
                     grid-template-columns: repeat(${gridSize}, ${tileSize}px);
                     gap: ${CONFIG.TILE_GAP}px;
@@ -422,23 +421,23 @@
                     align-items: center;
                 `;
 
-                const tiles = [];
-                const fragment = document.createDocumentFragment();
+        const tiles = [];
+        const fragment = document.createDocumentFragment();
 
-                colors.forEach((color, index) => {
-                    const tile = this.createTile(color, tileSize, index, oddColor);
-                    tiles.push(tile);
-                    fragment.appendChild(tile);
-                });
+        colors.forEach((color, index) => {
+            const tile = this.createTile(color, tileSize, index, oddColor);
+            tiles.push(tile);
+            fragment.appendChild(tile);
+        });
 
-                gridContainer.appendChild(fragment);
-                return { gridContainer, tiles };
-            },
+        gridContainer.appendChild(fragment);
+        return { gridContainer, tiles };
+    },
 
-            createTile(color, size, index, oddColor) {
-                const tile = document.createElement('div');
-                tile.className = 'chromakey-tile';
-                tile.style.cssText = `
+        createTile(color, size, index, oddColor) {
+            const tile = document.createElement('div');
+            tile.className = 'chromakey-tile';
+            tile.style.cssText = `
                     width: ${size}px;
                     height: ${size}px;
                     background: ${color};
@@ -450,27 +449,27 @@
                     -webkit-tap-highlight-color: transparent;
                 `;
 
-                tile.addEventListener('mouseenter', this.handleTileHover);
-                tile.addEventListener('mouseleave', this.handleTileLeave);
-                tile.addEventListener('click', () => GameEvents.handleTileClick(index, color, oddColor));
+            tile.addEventListener('mouseenter', this.handleTileHover);
+            tile.addEventListener('mouseleave', this.handleTileLeave);
+            tile.addEventListener('click', () => GameEvents.handleTileClick(index, color, oddColor));
 
-                return tile;
-            },
+            return tile;
+        },
 
             handleTileHover(event) {
                 event.target.style.transform = 'scale(1.05)';
                 event.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.15)';
             },
 
-            handleTileLeave(event) {
-                event.target.style.transform = 'scale(1)';
-                event.target.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
-            },
+                handleTileLeave(event) {
+                    event.target.style.transform = 'scale(1)';
+                    event.target.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
+                },
 
-            createGameOverModal(score, round) {
-                const overlay = document.createElement('div');
-                overlay.className = 'game-over-overlay';
-                overlay.style.cssText = `
+                    createGameOverModal(score, round) {
+                        const overlay = document.createElement('div');
+                        overlay.className = 'game-over-overlay';
+                        overlay.style.cssText = `
                     position: fixed;
                     top: 0;
                     left: 0;
@@ -484,9 +483,9 @@
                     z-index: 10001;
                 `;
 
-                const modal = document.createElement('div');
-                modal.className = 'game-over-modal';
-                modal.innerHTML = `
+                        const modal = document.createElement('div');
+                        modal.className = 'game-over-modal';
+                        modal.innerHTML = `
                     <h2 style="margin-bottom:10px;">Game Over</h2>
                     <p style="margin:4px 0;">Round: ${round}</p>
                     <p style="margin:4px 0 16px;">Score: ${score}</p>
@@ -507,7 +506,7 @@
                     <div class="leaderboard-content"></div>
                 `;
 
-                modal.style.cssText = `
+                        modal.style.cssText = `
                     background: linear-gradient(to bottom right, #222, #333);
                     color: #f0f0f0;
                     padding: 32px;
@@ -519,14 +518,14 @@
                     border: 1px solid rgba(255,255,255,0.1);
                 `;
 
-                overlay.appendChild(modal);
-                return { overlay, modal };
-            },
+                        overlay.appendChild(modal);
+                        return { overlay, modal };
+                    },
 
-            showLeaderboardModal() {
-                Database.fetchTopScores().then(scores => {
-                    const overlay = document.createElement('div');
-                    overlay.style.cssText = `
+                        showLeaderboardModal() {
+                            Database.fetchTopScores().then(scores => {
+                                const overlay = document.createElement('div');
+                                overlay.style.cssText = `
                         position: fixed;
                         top: 0; left: 0;
                         width: 100vw; height: 100vh;
@@ -535,15 +534,15 @@
                         display: flex; justify-content: center; align-items: center;
                         z-index: 10001;
                     `;
-                    overlay.addEventListener('click', e => {
-                        if (e.target === overlay) {
-                            e.stopPropagation();
-                            overlay.remove();
-                        }
-                    });
+                                overlay.addEventListener('click', e => {
+                                    if (e.target === overlay) {
+                                        e.stopPropagation();
+                                        overlay.remove();
+                                    }
+                                });
 
-                    const modal = document.createElement('div');
-                    modal.style.cssText = `
+                                const modal = document.createElement('div');
+                                modal.style.cssText = `
                         position: relative;
                         background: linear-gradient(to bottom right,#222,#333);
                         color: #f0f0f0;
@@ -555,11 +554,11 @@
                         font-family: 'Segoe UI', sans-serif;
                         border: 1px solid rgba(255,255,255,0.1);
                     `;
-                    overlay.appendChild(modal);
+                                overlay.appendChild(modal);
 
-                    const closeBtn = document.createElement('button');
-                    closeBtn.textContent = '×';
-                    closeBtn.style.cssText = `
+                                const closeBtn = document.createElement('button');
+                                closeBtn.textContent = '×';
+                                closeBtn.style.cssText = `
                         position: absolute;
                         top: 12px; right: 12px;
                         background: transparent;
@@ -568,321 +567,321 @@
                         font-size: 24px;
                         cursor: pointer;
                     `;
-                    closeBtn.addEventListener('click', e => {
-                        e.stopPropagation();
-                        overlay.remove();
-                    });
-                    modal.appendChild(closeBtn);
+                                closeBtn.addEventListener('click', e => {
+                                    e.stopPropagation();
+                                    overlay.remove();
+                                });
+                                modal.appendChild(closeBtn);
 
-                    const header = document.createElement('h2');
-                    header.textContent = 'Leaderboard';
-                    header.style.cssText = `margin: 0 0 16px; font-size: 24px;`;
-                    modal.appendChild(header);
+                                const header = document.createElement('h2');
+                                header.textContent = 'Leaderboard';
+                                header.style.cssText = `margin: 0 0 16px; font-size: 24px;`;
+                                modal.appendChild(header);
 
-                    scores.forEach((s,i) => {
-                        const p = document.createElement('p');
-                        p.textContent = `#${i+1}: ${s.name || 'Anon'} — ${s.score} pts (Round ${s.round})`;
-                        p.style.margin = '8px 0';
-                        modal.appendChild(p);
-                    });
+                                scores.forEach((s,i) => {
+                                    const p = document.createElement('p');
+                                    p.textContent = `#${i+1}: ${s.name || 'Anon'} — ${s.score} pts (Round ${s.round})`;
+                                    p.style.margin = '8px 0';
+                                    modal.appendChild(p);
+                                });
 
-                    document.body.appendChild(overlay);
-                });
-            },
+                                document.body.appendChild(overlay);
+                            });
+                        },
 
-            updateLeaderboard(modal, scores) {
-                const leaderboardContent = modal.querySelector('.leaderboard-content');
-                leaderboardContent.innerHTML = '';
+                            updateLeaderboard(modal, scores) {
+                                const leaderboardContent = modal.querySelector('.leaderboard-content');
+                                leaderboardContent.innerHTML = '';
 
-                scores.forEach((score, index) => {
-                    const entry = document.createElement('p');
-                    entry.style.margin = '2px 0';
-                    entry.textContent = `#${index + 1}: ${score.name || 'Anon'} - ${score.score} (Round ${score.round})`;
-                    leaderboardContent.appendChild(entry);
-                });
-            }
-        };
-
-        // --- EVENT HANDLING ---
-        const GameEvents = {
-            handleTileClick(index, clickedColor, oddColor) {
-                if (gameState.roundComplete || gameState.isGameOver) return;
-
-                const isCorrect = GameLogic.isCorrectTile(clickedColor, oddColor);
-
-                if (isCorrect) {
-                    this.handleCorrectChoice(index);
-                } else {
-                    this.handleIncorrectChoice();
-                }
-            },
-
-            handleCorrectChoice(index) {
-                const timeTaken = Date.now() - gameState.roundStartTime;
-                const roundScore = GameLogic.calculateScore(timeTaken, gameState.roundNumber);
-
-                gameState.score += roundScore;
-                gameState.roundComplete = true;
-
-                const tile = gameState.tiles[index];
-                tile.style.border = '4px solid white';
-                tile.style.transform = 'scale(1.1)';
-
-                setTimeout(() => {
-                    if (!gameState.isGameOver) {
-                        gameState.roundNumber++;
-                        GameFlow.showRound();
-                    }
-                }, CONFIG.ANIMATION_DURATION);
-            },
-
-            handleIncorrectChoice() {
-                gameState.isGameOver = true;
-
-                if (gameState.oddTileIndex >= 0 && gameState.tiles[gameState.oddTileIndex]) {
-                    gameState.tiles[gameState.oddTileIndex].style.border = '4px solid white';
-                }
-
-                GameFlow.endGame();
-            },
-
-            setupOutsideClickListener() {
-                const listener = Utils.debounce((event) => {
-                    if (gameState.gameContainer && !gameState.gameContainer.contains(event.target)) {
-                        GameFlow.resetGame();
-                    }
-                }, 50);
-
-                setTimeout(() => {
-                    gameState.outsideClickListener = listener;
-                    document.addEventListener('click', listener);
-                }, CONFIG.CLICK_DELAY);
-            },
-
-            removeOutsideClickListener() {
-                if (gameState.outsideClickListener) {
-                    document.removeEventListener('click', gameState.outsideClickListener);
-                    gameState.outsideClickListener = null;
-                }
-            }
-        };
-
-        // === GAME FLOW (ChromaKey) ===
-        const GameFlow = {
-            startGame() {
-                whenFirebaseReady(db => {
-                    const me = window.playerNameCK;
-                    db.collection('CK_notifications')
-                        .where('user', '==', me)
-                        .onSnapshot(snapshot => {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type === 'added') {
-                                alert(change.doc.data().message);
-                                change.doc.ref.delete();
+                                scores.forEach((score, index) => {
+                                    const entry = document.createElement('p');
+                                    entry.style.margin = '2px 0';
+                                    entry.textContent = `#${index + 1}: ${score.name || 'Anon'} - ${score.score} (Round ${score.round})`;
+                                    leaderboardContent.appendChild(entry);
+                                });
                             }
-                        });
-                    }, console.error);
-                });
+};
 
-                whenFirebaseReady(db => cleanupChromaKey(db));
-                gameState.playerName = window.playerNameCK || 'Player';
-                if (gameState.gameActive) return;
+// --- EVENT HANDLING ---
+const GameEvents = {
+    handleTileClick(index, clickedColor, oddColor) {
+        if (gameState.roundComplete || gameState.isGameOver) return;
 
-                gameState.gameActive = true;
-                gameState.roundNumber = 1;
-                gameState.score = 0;
+        const isCorrect = GameLogic.isCorrectTile(clickedColor, oddColor);
 
-                gameState.gameContainer = UI.createGameContainer();
-                document.body.appendChild(gameState.gameContainer);
+        if (isCorrect) {
+            this.handleCorrectChoice(index);
+        } else {
+            this.handleIncorrectChoice();
+        }
+    },
 
-                this.showRound();
-                GameEvents.setupOutsideClickListener();
-            },
+    handleCorrectChoice(index) {
+        const timeTaken = Date.now() - gameState.roundStartTime;
+        const roundScore = GameLogic.calculateScore(timeTaken, gameState.roundNumber);
 
-            showRound() {
-                gameState.roundStartTime = Date.now();
-                const roundData = GameLogic.generateRoundData(gameState.roundNumber);
-                const { gridContainer, tiles } = UI.createTileGrid(
-                    roundData.colors, roundData.gridSize, roundData.oddColor
-                );
+        gameState.score += roundScore;
+        gameState.roundComplete = true;
 
-                gameState.gameContainer.innerHTML = '';
-                gameState.gameContainer.appendChild(gridContainer);
+        const tile = gameState.tiles[index];
+        tile.style.border = '4px solid white';
+        tile.style.transform = 'scale(1.1)';
 
-                const lbBtn = document.createElement('button');
-                lbBtn.id = 'ck-view-leaderboard-btn';
-                lbBtn.textContent = 'View Leaderboard';
-                Object.assign(lbBtn.style, {
-                    margin: '20px auto 0',
-                    display: 'block',
-                    padding: '8px 16px',
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: '#fff',
-                    color: '#000',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'transform 0.1s ease, box-shadow 0.1s ease',
-                });
-                lbBtn.addEventListener('mouseenter', () => {
-                    lbBtn.style.transform = 'translateY(-2px)';
-                    lbBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                });
-                lbBtn.addEventListener('mouseleave', () => {
-                    lbBtn.style.transform = 'translateY(0)';
-                    lbBtn.style.boxShadow = 'none';
-                });
-                lbBtn.addEventListener('mousedown', () => {
-                    lbBtn.style.transform = 'translateY(1px)';
-                });
-                lbBtn.addEventListener('mouseup', () => {
-                    lbBtn.style.transform = 'translateY(-2px)';
-                });
+        setTimeout(() => {
+            if (!gameState.isGameOver) {
+                gameState.roundNumber++;
+                GameFlow.showRound();
+            }
+        }, CONFIG.ANIMATION_DURATION);
+    },
 
-                lbBtn.addEventListener('click', () => UI.showLeaderboardModal());
-                gameState.gameContainer.appendChild(lbBtn);
+    handleIncorrectChoice() {
+        gameState.isGameOver = true;
 
-                gameState.tiles = tiles;
-                gameState.roundComplete = false;
-                gameState.isGameOver = false;
-                gameState.oddTileIndex = roundData.colors.indexOf(roundData.oddColor);
-            },
+        if (gameState.oddTileIndex >= 0 && gameState.tiles[gameState.oddTileIndex]) {
+            gameState.tiles[gameState.oddTileIndex].style.border = '4px solid white';
+        }
 
-            endGame() {
-                const oldLb = document.getElementById('ck-view-leaderboard-btn');
-                if (oldLb) oldLb.remove();
-                const { overlay, modal } = UI.createGameOverModal(gameState.score, gameState.roundNumber);
+        GameFlow.endGame();
+    },
 
-                overlay.addEventListener('click', e => {
-                    if (e.target === overlay) {
-                        overlay.remove();
-                        this.resetGame();
+    setupOutsideClickListener() {
+        const listener = Utils.debounce((event) => {
+            if (gameState.gameContainer && !gameState.gameContainer.contains(event.target)) {
+                GameFlow.resetGame();
+            }
+        }, 50);
+
+        setTimeout(() => {
+            gameState.outsideClickListener = listener;
+            document.addEventListener('click', listener);
+        }, CONFIG.CLICK_DELAY);
+    },
+
+    removeOutsideClickListener() {
+        if (gameState.outsideClickListener) {
+            document.removeEventListener('click', gameState.outsideClickListener);
+            gameState.outsideClickListener = null;
+        }
+    }
+};
+
+// === GAME FLOW (ChromaKey) ===
+const GameFlow = {
+    startGame() {
+        whenFirebaseReady(db => {
+            const me = window.playerNameCK;
+            db.collection('CK_notifications')
+                .where('user', '==', me)
+                .onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        alert(change.doc.data().message);
+                        change.doc.ref.delete();
                     }
                 });
+            }, console.error);
+        });
 
-                modal.querySelector('.replay-btn').addEventListener('click', () => {
-                    overlay.remove();
-                    this.resetGame();
-                    setTimeout(() => this.startGame(), 0);
-                });
+        whenFirebaseReady(db => cleanupChromaKey(db));
+        gameState.playerName = window.playerNameCK || 'Player';
+        if (gameState.gameActive) return;
 
-                const viewBoardBtn = document.createElement('button');
-                viewBoardBtn.textContent = 'View Board';
-                Object.assign(viewBoardBtn.style, {
-                    margin: '8px 4px',
-                    padding: '8px 16px',
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: '#fff',
-                    color: '#000',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'transform 0.1s ease, box-shadow 0.1s ease'
-                });
-                viewBoardBtn.addEventListener('mouseenter', () => {
-                    viewBoardBtn.style.transform = 'translateY(-2px)';
-                    viewBoardBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                });
-                viewBoardBtn.addEventListener('mouseleave', () => {
-                    viewBoardBtn.style.transform = 'translateY(0)';
-                    viewBoardBtn.style.boxShadow = 'none';
-                });
+        gameState.gameActive = true;
+        gameState.roundNumber = 1;
+        gameState.score = 0;
 
-                viewBoardBtn.addEventListener('click', e => {
-                    e.stopPropagation();
-                    overlay.remove();
+        gameState.gameContainer = UI.createGameContainer();
+        document.body.appendChild(gameState.gameContainer);
 
-                    const viewResultsBtn = document.createElement('button');
-                    viewResultsBtn.textContent = 'View Results';
-                    Object.assign(viewResultsBtn.style, {
-                        margin: '20px auto 0',
-                        display: 'block',
-                        padding: '8px 16px',
-                        border: 'none',
-                        borderRadius: '8px',
-                        background: '#fff',
-                        color: '#000',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'transform 0.1s ease, box-shadow 0.1s ease'
-                    });
-                    viewResultsBtn.addEventListener('mouseenter', () => {
-                        viewResultsBtn.style.transform = 'translateY(-2px)';
-                        viewResultsBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    });
-                    viewResultsBtn.addEventListener('mouseleave', () => {
-                        viewResultsBtn.style.transform = 'translateY(0)';
-                        viewResultsBtn.style.boxShadow = 'none';
-                    });
-                    viewResultsBtn.addEventListener('click', e => {
-                        e.stopPropagation();
-                        document.body.appendChild(overlay);
-                        viewResultsBtn.remove();
-                    });
+        this.showRound();
+        GameEvents.setupOutsideClickListener();
+    },
 
-                    gameState.gameContainer.appendChild(viewResultsBtn);
-                });
+    showRound() {
+        gameState.roundStartTime = Date.now();
+        const roundData = GameLogic.generateRoundData(gameState.roundNumber);
+        const { gridContainer, tiles } = UI.createTileGrid(
+            roundData.colors, roundData.gridSize, roundData.oddColor
+        );
 
-                modal.appendChild(viewBoardBtn);
+        gameState.gameContainer.innerHTML = '';
+        gameState.gameContainer.appendChild(gridContainer);
+
+        const lbBtn = document.createElement('button');
+        lbBtn.id = 'ck-view-leaderboard-btn';
+        lbBtn.textContent = 'View Leaderboard';
+        Object.assign(lbBtn.style, {
+            margin: '20px auto 0',
+            display: 'block',
+            padding: '8px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: '#fff',
+            color: '#000',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'transform 0.1s ease, box-shadow 0.1s ease',
+        });
+        lbBtn.addEventListener('mouseenter', () => {
+            lbBtn.style.transform = 'translateY(-2px)';
+            lbBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        });
+        lbBtn.addEventListener('mouseleave', () => {
+            lbBtn.style.transform = 'translateY(0)';
+            lbBtn.style.boxShadow = 'none';
+        });
+        lbBtn.addEventListener('mousedown', () => {
+            lbBtn.style.transform = 'translateY(1px)';
+        });
+        lbBtn.addEventListener('mouseup', () => {
+            lbBtn.style.transform = 'translateY(-2px)';
+        });
+
+        lbBtn.addEventListener('click', () => UI.showLeaderboardModal());
+        gameState.gameContainer.appendChild(lbBtn);
+
+        gameState.tiles = tiles;
+        gameState.roundComplete = false;
+        gameState.isGameOver = false;
+        gameState.oddTileIndex = roundData.colors.indexOf(roundData.oddColor);
+    },
+
+    endGame() {
+        const oldLb = document.getElementById('ck-view-leaderboard-btn');
+        if (oldLb) oldLb.remove();
+        const { overlay, modal } = UI.createGameOverModal(gameState.score, gameState.roundNumber);
+
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) {
+                overlay.remove();
+                this.resetGame();
+            }
+        });
+
+        modal.querySelector('.replay-btn').addEventListener('click', () => {
+            overlay.remove();
+            this.resetGame();
+            setTimeout(() => this.startGame(), 0);
+        });
+
+        const viewBoardBtn = document.createElement('button');
+        viewBoardBtn.textContent = 'View Board';
+        Object.assign(viewBoardBtn.style, {
+            margin: '8px 4px',
+            padding: '8px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: '#fff',
+            color: '#000',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'transform 0.1s ease, box-shadow 0.1s ease'
+        });
+        viewBoardBtn.addEventListener('mouseenter', () => {
+            viewBoardBtn.style.transform = 'translateY(-2px)';
+            viewBoardBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        });
+        viewBoardBtn.addEventListener('mouseleave', () => {
+            viewBoardBtn.style.transform = 'translateY(0)';
+            viewBoardBtn.style.boxShadow = 'none';
+        });
+
+        viewBoardBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            overlay.remove();
+
+            const viewResultsBtn = document.createElement('button');
+            viewResultsBtn.textContent = 'View Results';
+            Object.assign(viewResultsBtn.style, {
+                margin: '20px auto 0',
+                display: 'block',
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: '8px',
+                background: '#fff',
+                color: '#000',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'transform 0.1s ease, box-shadow 0.1s ease'
+            });
+            viewResultsBtn.addEventListener('mouseenter', () => {
+                viewResultsBtn.style.transform = 'translateY(-2px)';
+                viewResultsBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            });
+            viewResultsBtn.addEventListener('mouseleave', () => {
+                viewResultsBtn.style.transform = 'translateY(0)';
+                viewResultsBtn.style.boxShadow = 'none';
+            });
+            viewResultsBtn.addEventListener('click', e => {
+                e.stopPropagation();
                 document.body.appendChild(overlay);
+                viewResultsBtn.remove();
+            });
 
-                Database.submitScore(gameState.score, gameState.roundNumber)
-                    .then(() => Database.fetchTopScores())
-                    .then(scores => UI.updateLeaderboard(modal, scores))
-                    .catch(err => console.error('Failed to load leaderboard:', err));
-            },
+            gameState.gameContainer.appendChild(viewResultsBtn);
+        });
 
-            resetGame() {
-                GameEvents.removeOutsideClickListener();
+        modal.appendChild(viewBoardBtn);
+        document.body.appendChild(overlay);
 
-                if (gameState.gameContainer) {
-                    gameState.gameContainer.remove();
-                    gameState.gameContainer = null;
+        Database.submitScore(gameState.score, gameState.roundNumber)
+            .then(() => Database.fetchTopScores())
+            .then(scores => UI.updateLeaderboard(modal, scores))
+            .catch(err => console.error('Failed to load leaderboard:', err));
+    },
+
+    resetGame() {
+        GameEvents.removeOutsideClickListener();
+
+        if (gameState.gameContainer) {
+            gameState.gameContainer.remove();
+            gameState.gameContainer = null;
+        }
+
+        gameState.gameActive = false;
+    }
+};
+
+const Database = {
+    submitScore(score, round) {
+        return new Promise((resolve, reject) => {
+            whenFirebaseReady(db =>
+                              db.collection('ChromaKey_scores').add({
+                name: gameState.playerName,
+                score,
+                round,
+                timestamp: new Date().toISOString()
+            })
+                              .then(resolve)
+                              .catch(reject)
+                             );
+        });
+    },
+
+    fetchTopScores(limit = 5) {
+        return new Promise(resolve => {
+            whenFirebaseReady(async db => {
+                try {
+                    const snap = await db.collection('ChromaKey_scores')
+                    .orderBy('score','desc')
+                    .limit(limit)
+                    .get();
+                    resolve(snap.docs.map(d => d.data()));
+                } catch {
+                    resolve([]);
                 }
+            });
+        });
+    }
+};
 
-                gameState.gameActive = false;
-            }
-        };
+window.startGame = GameFlow.startGame.bind(GameFlow);
+})();
 
-        const Database = {
-            submitScore(score, round) {
-                return new Promise((resolve, reject) => {
-                    whenFirebaseReady(db =>
-                                      db.collection('ChromaKey_scores').add({
-                        name: gameState.playerName,
-                        score,
-                        round,
-                        timestamp: new Date().toISOString()
-                    })
-                                      .then(resolve)
-                                      .catch(reject)
-                                     );
-                });
-            },
-
-            fetchTopScores(limit = 5) {
-                return new Promise(resolve => {
-                    whenFirebaseReady(async db => {
-                        try {
-                            const snap = await db.collection('ChromaKey_scores')
-                            .orderBy('score','desc')
-                            .limit(limit)
-                            .get();
-                            resolve(snap.docs.map(d => d.data()));
-                        } catch {
-                            resolve([]);
-                        }
-                    });
-                });
-            }
-        };
-
-        window.startGame = GameFlow.startGame.bind(GameFlow);
-    })();
-
-    // ================================
-    // === ATTACH LAUNCHER TO NAME ===
-    // ================================
-    attachNameClick();
+// ================================
+// === ATTACH LAUNCHER TO NAME ===
+// ================================
+attachNameClick();
 
 })();

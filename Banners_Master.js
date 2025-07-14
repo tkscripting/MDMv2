@@ -16,15 +16,16 @@
     // ──────────────────────────────────────────────────────────────────────────
     function loadFirebaseIfNeeded() {
         // Check if Firebase is already available
-        if (window.firebase?.initializeApp && window.firebase?.firestore) {
+        if (window.firebase?.initializeApp && window.firebase?.firestore && window.firebase?.auth) {
             console.log('[BannersMaster] ✅ Firebase already loaded by another script');
             initFirebase();
             return;
         }
 
-        // Only load what we need (no auth required for banner management)
+        // Load Firebase with auth for banner management
         const LIBS = [
             'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+            'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
             'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'
         ];
 
@@ -89,6 +90,36 @@
                 console.log('[BannersMaster] ✅ Created new Firebase app');
             }
 
+            // Set up authentication first
+            if (window.firebase.auth) {
+                const auth = app.auth();
+                if (auth.currentUser) {
+                    console.log('[BannersMaster] ✅ Already authenticated');
+                    setupFirestore(app);
+                } else {
+                    auth.signInAnonymously()
+                        .then(() => {
+                            console.log('[BannersMaster] ✅ Firebase auth successful');
+                        })
+                        .catch(err => {
+                            console.error('[BannersMaster] ❌ Firebase auth error:', err);
+                            console.warn('[BannersMaster] 🔧 Please enable Anonymous Authentication in Firebase Console');
+                        })
+                        .finally(() => {
+                            setupFirestore(app);
+                        });
+                }
+            } else {
+                console.error('[BannersMaster] Firebase Auth not available');
+                setupFirestore(app);
+            }
+        } catch (error) {
+            console.error('[BannersMaster] Firebase initialization error:', error);
+        }
+    }
+
+    function setupFirestore(app) {
+        try {
             if (window.firebase.firestore) {
                 db = app.firestore();
                 console.log('[BannersMaster] ✅ Firestore initialized');
@@ -97,7 +128,7 @@
                 console.error('[BannersMaster] Firestore not available');
             }
         } catch (error) {
-            console.error('[BannersMaster] Firebase initialization error:', error);
+            console.error('[BannersMaster] Firestore setup error:', error);
         }
     }
 

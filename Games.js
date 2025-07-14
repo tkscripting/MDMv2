@@ -61,11 +61,30 @@
     }
 
     function loadScripts(scripts, cb) {
+        // Check if Firebase is already loaded
+        if (typeof firebase !== 'undefined') {
+            console.log('✅ Firebase already loaded, checking modules...');
+
+            // Check if required modules are available
+            if (typeof firebase.auth === 'function' && typeof firebase.firestore === 'function') {
+                console.log('✅ All Firebase modules available, skipping script loading');
+                cb();
+                return;
+            } else {
+                console.log('⚠️ Firebase loaded but missing modules, loading additional scripts...');
+                // Continue to load scripts to get missing modules
+            }
+        }
+
         let loaded = 0;
         scripts.forEach(src => {
             const s = document.createElement('script');
             s.src = src;
             s.onload = () => {
+                if (++loaded === scripts.length) cb();
+            };
+            s.onerror = () => {
+                console.error('Failed to load Firebase script:', src);
                 if (++loaded === scripts.length) cb();
             };
             document.head.appendChild(s);
@@ -81,19 +100,78 @@
     }
 
     loadScripts(firebaseScripts, () => {
-        // 1) initialize
-        firebase.initializeApp(firebaseConfig);
+        try {
+            // Use a unique app name to avoid conflicts
+            const appName = 'games-userscript-app';
+            let app;
 
-        // 2) sign in anonymously
-        firebase.auth().signInAnonymously()
-            .catch(err => console.error('❌ auth error', err))
-            .finally(() => {
-            // 3) once (anon) auth is done, wire up Firestore
-            db = firebase.firestore();
+            try {
+                // Try to get existing app with our unique name
+                app = firebase.app(appName);
+                console.log('✅ Using existing Games Firebase app');
+            } catch (e) {
+                // App doesn't exist, create it with unique name
+                app = firebase.initializeApp(firebaseConfig, appName);
+                console.log('✅ Created new Games Firebase app');
+            }
+
+            // Check if auth module is available
+            if (typeof firebase.auth !== 'function') {
+                console.warn('⚠️ Firebase Auth module not available, continuing without authentication');
+                setupFirestore(app);
+                return;
+            }
+
+            // 2) sign in anonymously using our specific app
+            const auth = app.auth();
+            if (auth.currentUser) {
+                console.log('✅ Already authenticated');
+                setupFirestore(app);
+            } else {
+                auth.signInAnonymously()
+                    .then(() => {
+                        console.log('✅ Firebase auth successful');
+                    })
+                    .catch(err => {
+                        console.error('❌ Firebase auth error:', err);
+                        console.warn('🔧 Please enable Anonymous Authentication in Firebase Console');
+                        console.warn('📍 Go to: https://console.firebase.google.com/project/mdms-67bd4/authentication/providers');
+                    })
+                    .finally(() => {
+                        setupFirestore(app);
+                    });
+            }
+
+            function setupFirestore(app) {
+                try {
+                    // Check if firestore module is available
+                    if (typeof firebase.firestore !== 'function') {
+                        console.warn('⚠️ Firebase Firestore module not available');
+                        db = null;
+                    } else {
+                        db = app.firestore();
+                        console.log('✅ Firestore initialized successfully');
+                    }
+
+                    firebaseReady = true;
+                    firebaseCallbacks.forEach(cb => cb(db));
+                    firebaseCallbacks.length = 0;
+                } catch (firestoreErr) {
+                    console.error('❌ Firestore initialization error:', firestoreErr);
+                    // Allow game to continue without Firebase
+                    firebaseReady = true;
+                    firebaseCallbacks.forEach(cb => cb(null));
+                    firebaseCallbacks.length = 0;
+                }
+            }
+        } catch (initErr) {
+            console.error('❌ Firebase initialization error:', initErr);
+            console.warn('🔧 Check Firebase configuration and project setup');
+            // Allow game to continue without Firebase
             firebaseReady = true;
-            firebaseCallbacks.forEach(cb => cb(db));
+            firebaseCallbacks.forEach(cb => cb(null));
             firebaseCallbacks.length = 0;
-        });
+        }
     });
 
     // --- HELPER: name-click menu launcher ---
@@ -847,29 +925,46 @@
         const Database = {
             submitScore(score, round) {
                 return new Promise((resolve, reject) => {
-                    whenFirebaseReady(db =>
-                                      db.collection('ChromaKey_scores').add({
-                        name: gameState.playerName,
-                        score,
-                        round,
-                        timestamp: new Date().toISOString()
-                    })
-                                      .then(resolve)
-                                      .catch(reject)
-                                     );
+                    whenFirebaseReady(db => {
+                        if (!db) {
+                            console.warn('⚠️ Firebase not available, score not saved');
+                            resolve(); // Don't reject, just continue
+                            return;
+                        }
+
+                        db.collection('ChromaKey_scores').add({
+                            name: gameState.playerName,
+                            score,
+                            round,
+                            timestamp: new Date().toISOString()
+                        })
+                        .then(resolve)
+                        .catch(reject);
+                    });
                 });
             },
 
             fetchTopScores(limit = 5) {
                 return new Promise(resolve => {
                     whenFirebaseReady(async db => {
+                        if (!db) {
+                            console.warn('⚠️ Firebase not available, using mock leaderboard');
+                            resolve([
+                                { name: 'Demo Player', score: 500, round: 10 },
+                                { name: 'Test User', score: 300, round: 7 },
+                                { name: 'Sample', score: 200, round: 5 }
+                            ]);
+                            return;
+                        }
+
                         try {
                             const snap = await db.collection('ChromaKey_scores')
                             .orderBy('score','desc')
                             .limit(limit)
                             .get();
                             resolve(snap.docs.map(d => d.data()));
-                        } catch {
+                        } catch (err) {
+                            console.warn('⚠️ Failed to fetch scores:', err);
                             resolve([]);
                         }
                     });

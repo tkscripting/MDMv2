@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name         PIDS
+// @name         PIDs
 // @namespace    https://madame.ynap.biz/
 // @version      1.9
-// @description  1) Prepend translated VIDs above PIDs in worklists
-// @description  2) Auto-convert pasted PIDs into VIDs in search inputs
-// @description  3) Scan barcodes to:
+// @description  - Append PIDs above VIDs on worklists
+// @description  - Auto-convert pasted PIDs into VIDs in search inputs
+// @description  - Scan barcodes to:
 // @description     - On worklists: navigate to the item, open its retouching panel, and assign it to you
 // @description     - On search: populate the field and convert the PID into a VID
 // @match        https://madame.ynap.biz/*

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Banners_Viewer
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Allows user to view banners
 // @match        https://madame.ynap.biz/*
 // @grant        none
@@ -12,16 +12,50 @@
   'use strict';
 
   // ────────────────────────────────────────────────────────────────
-  // 1)  Load Firebase compat libs if missing
+  // 1)  Check if Firebase is already loaded by another script
   // ────────────────────────────────────────────────────────────────
-  const LIBS = [
-    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-    'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
-  ];
-  for (const src of LIBS) {
-    if (![...document.scripts].some((s) => s.src === src)) {
+  function loadFirebaseIfNeeded() {
+    // Check if Firebase is already available
+    if (window.firebase?.initializeApp && window.firebase?.firestore) {
+      console.log('[Banners] ✅ Firebase already loaded by another script');
+      initFirebase();
+      return;
+    }
+
+    // Only load what we need for banners (no auth required)
+    const LIBS = [
+      'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+      'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
+    ];
+
+    let loadedCount = 0;
+    const totalLibs = LIBS.length;
+
+    for (const src of LIBS) {
+      // Check if script is already loaded
+      if ([...document.scripts].some((s) => s.src === src)) {
+        loadedCount++;
+        if (loadedCount === totalLibs) {
+          setTimeout(initFirebase, 100);
+        }
+        continue;
+      }
+
       const script = document.createElement('script');
       script.src = src;
+      script.onload = () => {
+        loadedCount++;
+        if (loadedCount === totalLibs) {
+          setTimeout(initFirebase, 100);
+        }
+      };
+      script.onerror = () => {
+        console.error('[Banners] Failed to load Firebase script:', src);
+        loadedCount++;
+        if (loadedCount === totalLibs) {
+          setTimeout(initFirebase, 100);
+        }
+      };
       document.head.prepend(script);
     }
   }
@@ -41,41 +75,59 @@
   let db;
 
   // ────────────────────────────────────────────────────────────────
-  // 3)  Wait for firebase to load then init
+  // 3)  Initialize Firebase
   // ────────────────────────────────────────────────────────────────
-  (function waitForFirebase() {
-    if (window.firebase?.initializeApp) {
-      if (!firebase.apps.find((a) => a.name === APP_NAME)) {
-        firebase.initializeApp(firebaseConfig, APP_NAME);
-      }
-      db = firebase.app(APP_NAME).firestore();
-      init();
-    } else {
-      setTimeout(waitForFirebase, 100);
+  function initFirebase() {
+    if (!window.firebase?.initializeApp) {
+      console.error('[Banners] Firebase not available');
+      return;
     }
-  })();
+
+    try {
+      // Check if our app already exists
+      let app;
+      try {
+        app = firebase.app(APP_NAME);
+        console.log('[Banners] ✅ Using existing Firebase app');
+      } catch (e) {
+        // App doesn't exist, create it
+        app = firebase.initializeApp(firebaseConfig, APP_NAME);
+        console.log('[Banners] ✅ Created new Firebase app');
+      }
+
+      if (window.firebase.firestore) {
+        db = app.firestore();
+        console.log('[Banners] ✅ Firestore initialized');
+        init();
+      } else {
+        console.error('[Banners] Firestore not available');
+      }
+    } catch (error) {
+      console.error('[Banners] Firebase initialization error:', error);
+    }
+  }
 
   // ────────────────────────────────────────────────────────────────
   // 4)  Banner factory
   // ────────────────────────────────────────────────────────────────
-function makeBanner(id) {
-  const wrap = document.createElement('div');
-  wrap.id = 'bn-' + id;
-  wrap.style.cssText = [
-    'width:100%',
-    'display:none',            // shown later as "flex"
-    'box-sizing:border-box',
-    'padding:8px 12px',
-    'z-index:9999',
-    'user-select:none',
-    'justify-content:center',  // ⟵ center horizontally
-    'align-items:center',      // ⟵ center vertically
-    'text-align:center'        // ⟵ span text centered
-  ].join(';');
-  const txt = document.createElement('span');
-  wrap.appendChild(txt);
-  return { wrap, txt };
-}
+  function makeBanner(id) {
+    const wrap = document.createElement('div');
+    wrap.id = 'bn-' + id;
+    wrap.style.cssText = [
+      'width:100%',
+      'display:none',
+      'box-sizing:border-box',
+      'padding:8px 12px',
+      'z-index:9999',
+      'user-select:none',
+      'justify-content:center',
+      'align-items:center',
+      'text-align:center'
+    ].join(';');
+    const txt = document.createElement('span');
+    wrap.appendChild(txt);
+    return { wrap, txt };
+  }
 
   // ────────────────────────────────────────────────────────────────
   // 5)  Insertion helpers
@@ -86,6 +138,7 @@ function makeBanner(id) {
       document.body.prepend(globalB.wrap);
     }
   }
+
   function insertPage() {
     if (!document.body) return setTimeout(insertPage, 50);
     if (!pageB.wrap.parentNode) {
@@ -109,7 +162,6 @@ function makeBanner(id) {
       inserter();
 
       if (msg) {
-        // — banner *should* be visible —
         banner.txt.textContent = msg;
         banner.wrap.style.background = d.bgColor || 'transparent';
         banner.wrap.style.color = d.fgColor || '#000';
@@ -121,19 +173,19 @@ function makeBanner(id) {
             }
           : null;
 
-        if (!wasVisible) console.log('[Banner]', 'Added banner');
+        if (!wasVisible) console.log('[Banners] Added banner');
         wasVisible = true;
       } else {
-        // — banner *should not* be visible —
         banner.wrap.style.display = 'none';
-
         if (wasVisible) {
-          console.log('[Banner]', 'Removed banner');
+          console.log('[Banners] Removed banner');
         } else {
-          console.log('[Banner]', 'No banner message to add');
+          console.log('[Banners] No banner message to add');
         }
         wasVisible = false;
       }
+    }, error => {
+      console.error('[Banners] Firestore error:', error);
     });
   }
 
@@ -141,7 +193,13 @@ function makeBanner(id) {
   // 7)  Main init
   // ────────────────────────────────────────────────────────────────
   let globalB, pageB, unsubPage;
+
   function init() {
+    if (!db) {
+      console.error('[Banners] Database not initialized');
+      return;
+    }
+
     globalB = makeBanner('global');
     pageB = makeBanner('page');
 
@@ -166,4 +224,9 @@ function makeBanner(id) {
     });
     window.addEventListener('popstate', subscribePage);
   }
+
+  // ────────────────────────────────────────────────────────────────
+  // 8)  Start the initialization process
+  // ────────────────────────────────────────────────────────────────
+  loadFirebaseIfNeeded();
 })();

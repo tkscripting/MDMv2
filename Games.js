@@ -18,12 +18,12 @@
     ];
 
     const firebaseConfig = {
-        apiKey: "AIzaSyB47ckpUatftA4EN8zKrP9qewwSCWIYHTQ",
-        authDomain: "gotgames-15f31.firebaseapp.com",
-        projectId: "gotgames-15f31",
-        storageBucket: "gotgames-15f31.firebasestorage.app",
-        messagingSenderId: "221607163617",
-        appId: "1:221607163617:web:900289395962aad01629a0"
+        apiKey: "AIzaSyCMOQbRMnv_P89_g8PiWqxQm7rlgsrZ7jw",
+        authDomain: "mdms-67bd4.firebaseapp.com",
+        projectId: "mdms-67bd4",
+        storageBucket: "mdms-67bd4.firebasestorage.app",
+        messagingSenderId: "968504770003",
+        appId: "1:968504770003:web:afa2c955c6658ff761c326"
     };
 
     let db;

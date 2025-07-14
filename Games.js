@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Games
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Unlimited games, but no games
 // @match        https://madame.ynap.biz/*
 // @grant        none
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    // --- SHARED FIREBASE SETUP ---
+    // --- OPTIMIZED FIREBASE SETUP ---
     const firebaseScripts = [
         'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
         'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
@@ -32,60 +32,73 @@
 
     // --- CLEANUP: keep only top-5 ChromaKey scores ---
     function cleanupChromaKey(db) {
+        if (!db) return;
         const col = db.collection('ChromaKey_scores');
         col.orderBy('score','desc').limit(5).get()
             .then(topSnap => {
-            const keep = new Set(topSnap.docs.map(d => d.id));
-            return col.get().then(allSnap => {
-                allSnap.docs.forEach(d => {
-                    if (!keep.has(d.id)) col.doc(d.id).delete();
+                const keep = new Set(topSnap.docs.map(d => d.id));
+                return col.get().then(allSnap => {
+                    allSnap.docs.forEach(d => {
+                        if (!keep.has(d.id)) col.doc(d.id).delete();
+                    });
                 });
-            });
-        })
+            })
             .catch(console.error);
     }
 
     // --- CLEANUP: keep only top-5 Pathfinder scores ---
     function cleanupPathfinder(db) {
+        if (!db) return;
         const col = db.collection('Pathfinder_scores');
         col.orderBy('score','desc').limit(5).get()
             .then(topSnap => {
-            const keep = new Set(topSnap.docs.map(d => d.id));
-            return col.get().then(allSnap => {
-                allSnap.docs.forEach(d => {
-                    if (!keep.has(d.id)) col.doc(d.id).delete();
+                const keep = new Set(topSnap.docs.map(d => d.id));
+                return col.get().then(allSnap => {
+                    allSnap.docs.forEach(d => {
+                        if (!keep.has(d.id)) col.doc(d.id).delete();
+                    });
                 });
-            });
-        })
+            })
             .catch(console.error);
     }
 
     function loadScripts(scripts, cb) {
-        // Check if Firebase is already loaded
+        // Check if Firebase is already loaded (by banners script or other)
         if (typeof firebase !== 'undefined') {
-            console.log('✅ Firebase already loaded, checking modules...');
+            console.log('[Games] ✅ Firebase already loaded, checking modules...');
 
             // Check if required modules are available
             if (typeof firebase.auth === 'function' && typeof firebase.firestore === 'function') {
-                console.log('✅ All Firebase modules available, skipping script loading');
+                console.log('[Games] ✅ All Firebase modules available, skipping script loading');
                 cb();
                 return;
             } else {
-                console.log('⚠️ Firebase loaded but missing modules, loading additional scripts...');
-                // Continue to load scripts to get missing modules
+                console.log('[Games] ⚠️ Firebase loaded but missing modules, loading additional scripts...');
             }
         }
 
+        // Only load scripts that aren't already loaded
+        const scriptsToLoad = scripts.filter(src =>
+            ![...document.scripts].some(script => script.src === src)
+        );
+
+        if (scriptsToLoad.length === 0) {
+            console.log('[Games] ✅ All Firebase scripts already loaded');
+            cb();
+            return;
+        }
+
         let loaded = 0;
-        scripts.forEach(src => {
+        scriptsToLoad.forEach(src => {
             const s = document.createElement('script');
             s.src = src;
             s.onload = () => {
-                if (++loaded === scripts.length) cb();
+                console.log('[Games] ✅ Loaded:', src);
+                if (++loaded === scriptsToLoad.length) cb();
             };
             s.onerror = () => {
-                console.error('Failed to load Firebase script:', src);
-                if (++loaded === scripts.length) cb();
+                console.error('[Games] ❌ Failed to load Firebase script:', src);
+                if (++loaded === scriptsToLoad.length) cb();
             };
             document.head.appendChild(s);
         });
@@ -99,80 +112,81 @@
         }
     }
 
-    loadScripts(firebaseScripts, () => {
+    function initializeFirebase() {
         try {
-            // Use a unique app name to avoid conflicts
+            // Use a unique app name to avoid conflicts with banners script
             const appName = 'games-userscript-app';
             let app;
 
             try {
                 // Try to get existing app with our unique name
                 app = firebase.app(appName);
-                console.log('✅ Using existing Games Firebase app');
+                console.log('[Games] ✅ Using existing Games Firebase app');
             } catch (e) {
                 // App doesn't exist, create it with unique name
                 app = firebase.initializeApp(firebaseConfig, appName);
-                console.log('✅ Created new Games Firebase app');
+                console.log('[Games] ✅ Created new Games Firebase app');
             }
 
             // Check if auth module is available
             if (typeof firebase.auth !== 'function') {
-                console.warn('⚠️ Firebase Auth module not available, continuing without authentication');
+                console.warn('[Games] ⚠️ Firebase Auth module not available, continuing without authentication');
                 setupFirestore(app);
                 return;
             }
 
-            // 2) sign in anonymously using our specific app
+            // Sign in anonymously using our specific app
             const auth = app.auth();
             if (auth.currentUser) {
-                console.log('✅ Already authenticated');
+                console.log('[Games] ✅ Already authenticated');
                 setupFirestore(app);
             } else {
                 auth.signInAnonymously()
                     .then(() => {
-                        console.log('✅ Firebase auth successful');
+                        console.log('[Games] ✅ Firebase auth successful');
                     })
                     .catch(err => {
-                        console.error('❌ Firebase auth error:', err);
-                        console.warn('🔧 Please enable Anonymous Authentication in Firebase Console');
-                        console.warn('📍 Go to: https://console.firebase.google.com/project/mdms-67bd4/authentication/providers');
+                        console.error('[Games] ❌ Firebase auth error:', err);
+                        console.warn('[Games] 🔧 Please enable Anonymous Authentication in Firebase Console');
                     })
                     .finally(() => {
                         setupFirestore(app);
                     });
             }
-
-            function setupFirestore(app) {
-                try {
-                    // Check if firestore module is available
-                    if (typeof firebase.firestore !== 'function') {
-                        console.warn('⚠️ Firebase Firestore module not available');
-                        db = null;
-                    } else {
-                        db = app.firestore();
-                        console.log('✅ Firestore initialized successfully');
-                    }
-
-                    firebaseReady = true;
-                    firebaseCallbacks.forEach(cb => cb(db));
-                    firebaseCallbacks.length = 0;
-                } catch (firestoreErr) {
-                    console.error('❌ Firestore initialization error:', firestoreErr);
-                    // Allow game to continue without Firebase
-                    firebaseReady = true;
-                    firebaseCallbacks.forEach(cb => cb(null));
-                    firebaseCallbacks.length = 0;
-                }
-            }
         } catch (initErr) {
-            console.error('❌ Firebase initialization error:', initErr);
-            console.warn('🔧 Check Firebase configuration and project setup');
+            console.error('[Games] ❌ Firebase initialization error:', initErr);
             // Allow game to continue without Firebase
             firebaseReady = true;
             firebaseCallbacks.forEach(cb => cb(null));
             firebaseCallbacks.length = 0;
         }
-    });
+    }
+
+    function setupFirestore(app) {
+        try {
+            // Check if firestore module is available
+            if (typeof firebase.firestore !== 'function') {
+                console.warn('[Games] ⚠️ Firebase Firestore module not available');
+                db = null;
+            } else {
+                db = app.firestore();
+                console.log('[Games] ✅ Firestore initialized successfully');
+            }
+
+            firebaseReady = true;
+            firebaseCallbacks.forEach(cb => cb(db));
+            firebaseCallbacks.length = 0;
+        } catch (firestoreErr) {
+            console.error('[Games] ❌ Firestore initialization error:', firestoreErr);
+            // Allow game to continue without Firebase
+            firebaseReady = true;
+            firebaseCallbacks.forEach(cb => cb(null));
+            firebaseCallbacks.length = 0;
+        }
+    }
+
+    // Start Firebase initialization
+    loadScripts(firebaseScripts, initializeFirebase);
 
     // --- HELPER: name-click menu launcher ---
     function attachNameClick() {
@@ -361,16 +375,13 @@
                 return `hsl(${h}, ${s}%, ${l}%)`;
             },
 
-            // inside Utils:
             generateVariantColor(baseColor, difficulty) {
-                // linear mapping of difficulty [1–20] to variance [MAX_VARIANCE–MIN_VARIANCE]
                 const { MIN_VARIANCE, MAX_VARIANCE } = CONFIG;
                 const maxRound = 20;
                 const t = Math.min(difficulty / maxRound, 1);
                 const variance = MAX_VARIANCE - t * (MAX_VARIANCE - MIN_VARIANCE);
 
                 const { h, s, l } = this.parseHSL(baseColor);
-                // random offset in range [-variance/2, +variance/2]
                 const offset = () => Math.random() * variance - variance / 2;
 
                 const newH = (h + offset() + 360) % 360;
@@ -748,17 +759,19 @@
         const GameFlow = {
             startGame() {
                 whenFirebaseReady(db => {
-                    const me = window.playerNameCK;
-                    db.collection('CK_notifications')
-                        .where('user', '==', me)
-                        .onSnapshot(snapshot => {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type === 'added') {
-                                alert(change.doc.data().message);
-                                change.doc.ref.delete();
-                            }
-                        });
-                    }, console.error);
+                    if (db) {
+                        const me = window.playerNameCK;
+                        db.collection('CK_notifications')
+                            .where('user', '==', me)
+                            .onSnapshot(snapshot => {
+                                snapshot.docChanges().forEach(change => {
+                                    if (change.type === 'added') {
+                                        alert(change.doc.data().message);
+                                        change.doc.ref.delete();
+                                    }
+                                });
+                            }, console.error);
+                    }
                 });
 
                 whenFirebaseReady(db => cleanupChromaKey(db));
@@ -847,7 +860,7 @@
                 viewBoardBtn.textContent = 'View Board';
                 Object.assign(viewBoardBtn.style, {
                     display: 'block',
-                    margin: '24px auto 8px',   // <-- 24px space above, 8px below, centered
+                    margin: '24px auto 8px',
                     padding: '8px 16px',
                     border: 'none',
                     borderRadius: '8px',
@@ -907,7 +920,7 @@
                 Database.submitScore(gameState.score, gameState.roundNumber)
                     .then(() => Database.fetchTopScores())
                     .then(scores => UI.updateLeaderboard(modal, scores))
-                    .catch(err => console.error('Failed to load leaderboard:', err));
+                    .catch(err => console.error('[Games] Failed to load leaderboard:', err));
             },
 
             resetGame() {
@@ -927,8 +940,8 @@
                 return new Promise((resolve, reject) => {
                     whenFirebaseReady(db => {
                         if (!db) {
-                            console.warn('⚠️ Firebase not available, score not saved');
-                            resolve(); // Don't reject, just continue
+                            console.warn('[Games] ⚠️ Firebase not available, score not saved');
+                            resolve();
                             return;
                         }
 
@@ -948,7 +961,7 @@
                 return new Promise(resolve => {
                     whenFirebaseReady(async db => {
                         if (!db) {
-                            console.warn('⚠️ Firebase not available, using mock leaderboard');
+                            console.warn('[Games] ⚠️ Firebase not available, using mock leaderboard');
                             resolve([
                                 { name: 'Demo Player', score: 500, round: 10 },
                                 { name: 'Test User', score: 300, round: 7 },
@@ -964,7 +977,7 @@
                             .get();
                             resolve(snap.docs.map(d => d.data()));
                         } catch (err) {
-                            console.warn('⚠️ Failed to fetch scores:', err);
+                            console.warn('[Games] ⚠️ Failed to fetch scores:', err);
                             resolve([]);
                         }
                     });

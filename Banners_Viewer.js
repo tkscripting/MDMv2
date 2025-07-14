@@ -59,21 +59,24 @@
   // ────────────────────────────────────────────────────────────────
   // 4)  Banner factory
   // ────────────────────────────────────────────────────────────────
-  function makeBanner(id) {
-    const wrap = document.createElement('div');
-    wrap.id = 'bn-' + id;
-    wrap.style.cssText = [
-      'width:100%',
-      'display:none',
-      'box-sizing:border-box',
-      'padding:8px 12px',
-      'z-index:9999',
-      'user-select:none',
-    ].join(';');
-    const txt = document.createElement('span');
-    wrap.appendChild(txt);
-    return { wrap, txt };
-  }
+function makeBanner(id) {
+  const wrap = document.createElement('div');
+  wrap.id = 'bn-' + id;
+  wrap.style.cssText = [
+    'width:100%',
+    'display:none',            // shown later as "flex"
+    'box-sizing:border-box',
+    'padding:8px 12px',
+    'z-index:9999',
+    'user-select:none',
+    'justify-content:center',  // ⟵ center horizontally
+    'align-items:center',      // ⟵ center vertically
+    'text-align:center'        // ⟵ span text centered
+  ].join(';');
+  const txt = document.createElement('span');
+  wrap.appendChild(txt);
+  return { wrap, txt };
+}
 
   // ────────────────────────────────────────────────────────────────
   // 5)  Insertion helpers

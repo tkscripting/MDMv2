@@ -113,6 +113,13 @@
     }
 
     function initializeFirebase() {
+        // Add a small delay and check if Firebase is actually available
+        if (typeof firebase === 'undefined') {
+            console.log('[Games] ⏳ Firebase not yet available, waiting...');
+            setTimeout(initializeFirebase, 200);
+            return;
+        }
+
         try {
             // Use a unique app name to avoid conflicts with banners script
             const appName = 'games-userscript-app';
@@ -760,17 +767,27 @@
             startGame() {
                 whenFirebaseReady(db => {
                     if (db) {
-                        const me = window.playerNameCK;
-                        db.collection('CK_notifications')
-                            .where('user', '==', me)
-                            .onSnapshot(snapshot => {
-                                snapshot.docChanges().forEach(change => {
-                                    if (change.type === 'added') {
-                                        alert(change.doc.data().message);
-                                        change.doc.ref.delete();
-                                    }
+                        // Get the Firebase auth instance from our app
+                        const auth = firebase.app('games-userscript-app').auth();
+
+                        // Only set up notifications if user is authenticated
+                        if (auth.currentUser) {
+                            const userId = auth.currentUser.uid;
+                            db.collection('CK_notifications')
+                                .where('user', '==', userId)
+                                .onSnapshot(snapshot => {
+                                    snapshot.docChanges().forEach(change => {
+                                        if (change.type === 'added') {
+                                            alert(change.doc.data().message);
+                                            change.doc.ref.delete();
+                                        }
+                                    });
+                                }, error => {
+                                    console.warn('[Games] Notifications error (this is normal if not authenticated):', error.message);
                                 });
-                            }, console.error);
+                        } else {
+                            console.log('[Games] No authenticated user, skipping notifications setup');
+                        }
                     }
                 });
 

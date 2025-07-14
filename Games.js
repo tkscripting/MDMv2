@@ -29,14 +29,12 @@
     let firebaseReady = false;
     const firebaseCallbacks = [];
 
-    // --- CLEANUP: keep only top-5 OddOneOut scores ---
-    function cleanupOddOneOut(db) {
-        const col = db.collection('OOO_scores');
-        // 1) grab IDs of top-5
+    // --- CLEANUP: keep only top-5 ChromaKey scores ---
+    function cleanupChromaKey(db) {
+        const col = db.collection('ChromaKey_scores');
         col.orderBy('score','desc').limit(5).get()
             .then(topSnap => {
             const keep = new Set(topSnap.docs.map(d => d.id));
-            // 2) delete every other doc
             return col.get().then(allSnap => {
                 allSnap.docs.forEach(d => {
                     if (!keep.has(d.id)) col.doc(d.id).delete();
@@ -46,15 +44,16 @@
             .catch(console.error);
     }
 
-    // --- CLEANUP: drop ENCRPT entries from any date ≠ today ---
-    function cleanupEncrpt(db) {
-        const col = db.collection('encrpt_daily_scores');
-        const D = new Date();
-        const today = `${D.getFullYear()}-${String(D.getMonth()+1).padStart(2,'0')}-${String(D.getDate()).padStart(2,'0')}`;
-        col.get()
-            .then(snap => {
-            snap.docs.forEach(d => {
-                if (d.data().date !== today) col.doc(d.id).delete();
+    // --- CLEANUP: keep only top-5 Pathfinder scores ---
+    function cleanupPathfinder(db) {
+        const col = db.collection('Pathfinder_scores');
+        col.orderBy('score','desc').limit(5).get()
+            .then(topSnap => {
+            const keep = new Set(topSnap.docs.map(d => d.id));
+            return col.get().then(allSnap => {
+                allSnap.docs.forEach(d => {
+                    if (!keep.has(d.id)) col.doc(d.id).delete();
+                });
             });
         })
             .catch(console.error);
@@ -88,9 +87,8 @@
         firebaseCallbacks.length = 0;
     });
 
-    // --- HELPER: name-click menu launcher (ROBUST SELECTOR) ---
+    // --- HELPER: name-click menu launcher ---
     function attachNameClick() {
-        // Try multiple possible selectors in order of preference
         const selectors = [
             '.MuiTypography-root.MuiTypography-subtitle1.MuiTypography-noWrap.css-ywpd4f',
             '.MuiTypography-root.MuiTypography-subtitle1.MuiTypography-noWrap.css-aj6ovs',
@@ -129,18 +127,15 @@
     }
 
     function showGameMenu(e) {
-        // 1) read the name element you clicked
         const full = e.currentTarget.textContent.trim();
         const parts = full.split(' ');
-        // build "First L"
         const formatted = parts.length > 1
         ? `${parts[0]} ${parts[1][0]}`
         : parts[0];
 
         window.playerName = formatted;
-        window.playerNameOO = formatted;
+        window.playerNameCK = formatted;
 
-        // 2) build the overlay/menu
         const overlay = document.createElement('div');
         overlay.style = `
             position:fixed;
@@ -163,27 +158,12 @@
             display: flex;
             gap: 12px;
             padding: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
         `;
         panel.innerHTML = `
             <button
-                id="encrpt-btn"
-                style="
-                    padding: 10px 16px;
-                    border: none;
-                    border-radius: 8px;
-                    background: linear-gradient(to right, #2b5876, #4e4376);
-                    color: white;
-                    font-weight: 600;
-                    cursor: pointer;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-                    transition: transform 0.15s;
-                "
-            >
-                ENCRPT
-            </button>
-
-            <button
-                id="oddone-btn"
+                id="chromakey-btn"
                 style="
                     padding: 10px 16px;
                     border: none;
@@ -196,7 +176,7 @@
                     transition: transform 0.15s;
                 "
             >
-                OddOneOut
+                ChromaKey
             </button>
         `;
         overlay.appendChild(panel);
@@ -205,23 +185,17 @@
             if (ev.target === overlay) overlay.remove();
         });
 
-        document.getElementById('encrpt-btn').onclick = () => {
-            overlay.remove();
-            alert('ENCRPT – coming soon!');   // simple placeholder
-        };
-        document.getElementById('oddone-btn').onclick = () => {
-            overlay.remove();
-            startGame();
-        };
+        // Use event delegation to avoid timing issues
+        panel.addEventListener('click', (ev) => {
+            if (ev.target.id === 'chromakey-btn') {
+                overlay.remove();
+                startGame();
+            }
+        });
     }
 
-    // ========================
-    // === ENCRPT GAME CODE ===
-    // ========================
-
-
     // ==================================
-    // === IMPROVED ODDONEOUT GAME CODE ===
+    // ======  CHROMAKEY GAME CODE ======
     // ==================================
     (function () {
         'use strict';
@@ -240,9 +214,9 @@
             GRID_PADDING: 2,
             ANIMATION_DURATION: 300,
             CLICK_DELAY: 100,
-            MAX_VARIANCE: 65,      // Higher starting variance for easier beginning
-            MIN_VARIANCE: 8,       // Higher minimum for gentler difficulty
-            VARIANCE_REDUCTION: 1.8, // Much slower difficulty ramp
+            MAX_VARIANCE: 65,
+            MIN_VARIANCE: 8,
+            VARIANCE_REDUCTION: 1.8,
             COLOR_RANGES: {
                 HUE: { min: 0, max: 360 },
                 SATURATION: { min: 60, max: 100 },
@@ -276,7 +250,6 @@
 
         // --- UTILITY FUNCTIONS ---
         const Utils = {
-            // Optimized HSL parsing with caching
             hslCache: new Map(),
 
             parseHSL(colorString) {
@@ -293,7 +266,6 @@
                 return result;
             },
 
-            // Improved random color generation with better distribution
             generateRandomColor() {
                 const { COLOR_RANGES } = CONFIG;
                 const h = Math.floor(Math.random() * COLOR_RANGES.HUE.max);
@@ -302,31 +274,25 @@
                 return `hsl(${h}, ${s}%, ${l}%)`;
             },
 
-            // Gentler color variation algorithm with slower progression
             generateVariantColor(baseColor, difficulty) {
                 const hsl = this.parseHSL(baseColor);
                 const variance = Math.max(CONFIG.MIN_VARIANCE, CONFIG.MAX_VARIANCE - difficulty * CONFIG.VARIANCE_REDUCTION);
 
-                // Use different strategies for color variation based on difficulty
                 let h, s, l;
 
                 if (difficulty <= 4) {
-                    // Early rounds: very obvious differences
                     h = (hsl.h + (Math.random() * variance * 1.6 - variance * 0.8) + 360) % 360;
                     s = Math.max(20, Math.min(100, hsl.s + (Math.random() * variance * 0.9 - variance * 0.45)));
                     l = Math.max(20, Math.min(80, hsl.l + (Math.random() * variance * 0.9 - variance * 0.45)));
                 } else if (difficulty <= 10) {
-                    // Extended early-mid phase: still quite noticeable differences
                     h = (hsl.h + (Math.random() * variance * 1.3 - variance * 0.65) + 360) % 360;
                     s = Math.max(25, Math.min(100, hsl.s + (Math.random() * variance * 0.8 - variance * 0.4)));
                     l = Math.max(25, Math.min(80, hsl.l + (Math.random() * variance * 0.8 - variance * 0.4)));
                 } else if (difficulty <= 18) {
-                    // Mid rounds: moderate differences
                     h = (hsl.h + (Math.random() * variance - variance * 0.5) + 360) % 360;
                     s = Math.max(30, Math.min(95, hsl.s + (Math.random() * variance * 0.7 - variance * 0.35)));
                     l = Math.max(30, Math.min(75, hsl.l + (Math.random() * variance * 0.7 - variance * 0.35)));
                 } else {
-                    // Later rounds: subtle but still reasonable differences
                     h = (hsl.h + (Math.random() * variance * 0.6 - variance * 0.3) + 360) % 360;
                     const satVariance = variance * 0.7;
                     const lightVariance = variance * 0.8;
@@ -337,7 +303,6 @@
                 return `hsl(${h}, ${s}%, ${l}%)`;
             },
 
-            // Fisher-Yates shuffle (in-place)
             shuffleArray(array) {
                 for (let i = array.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
@@ -346,22 +311,18 @@
                 return array;
             },
 
-            // Optimized responsive tile sizing with better screen space management
             calculateOptimalTileSize(gridSize) {
-                // Account for container padding, margins, and potential UI elements
-                const containerPadding = 56; // 28px * 2 for top/bottom padding
+                const containerPadding = 56;
                 const availableWidth = window.innerWidth - (CONFIG.GRID_PADDING * 2 * CONFIG.TILE_MARGIN);
                 const availableHeight = window.innerHeight - containerPadding - (CONFIG.GRID_PADDING * 2 * CONFIG.TILE_MARGIN);
 
                 const maxTileWidth = Math.floor((availableWidth - (gridSize - 1) * CONFIG.TILE_GAP) / gridSize);
                 const maxTileHeight = Math.floor((availableHeight - (gridSize - 1) * CONFIG.TILE_GAP) / gridSize);
 
-                // More conservative size limits to prevent overflow
                 const maxSize = Math.min(maxTileWidth, maxTileHeight);
-                return Math.max(40, Math.min(maxSize, 100)); // Min 40px, max 100px (reduced from 120px)
+                return Math.max(40, Math.min(maxSize, 100));
             },
 
-            // Debounced function utility
             debounce(func, wait) {
                 let timeout;
                 return function executedFunction(...args) {
@@ -378,12 +339,11 @@
         // --- GAME LOGIC ---
         const GameLogic = {
             calculateGridSize(round) {
-                // Faster grid size progression for more variety
-                if (round <= 2) return 2;      // 2x2 for first 2 rounds only
-                if (round <= 4) return 3;      // 3x3 for rounds 3-4
-                if (round <= 7) return 4;      // 4x4 for rounds 5-7
-                if (round <= 11) return 5;     // 5x5 for rounds 8-11
-                return Math.min(6, CONFIG.MAX_GRID_SIZE); // 6x6 for rounds 12+
+                if (round <= 2) return 2;
+                if (round <= 4) return 3;
+                if (round <= 7) return 4;
+                if (round <= 11) return 5;
+                return Math.min(6, CONFIG.MAX_GRID_SIZE);
             },
 
             generateRoundData(round) {
@@ -393,7 +353,6 @@
                 const baseColor = Utils.generateRandomColor();
                 const oddColor = Utils.generateVariantColor(baseColor, round);
 
-                // Create array with one odd color and rest base colors
                 const colorArray = new Array(tileCount - 1).fill(baseColor);
                 colorArray.push(oddColor);
 
@@ -422,9 +381,8 @@
         const UI = {
             createGameContainer() {
                 const container = document.createElement('div');
-                container.className = 'oddoneout-game-container';
+                container.className = 'chromakey-game-container';
 
-                // Improved container styling to prevent overflow
                 container.style.cssText = `
                     position: fixed;
                     top: 50%;
@@ -479,7 +437,7 @@
 
             createTile(color, size, index, oddColor) {
                 const tile = document.createElement('div');
-                tile.className = 'oddoneout-tile';
+                tile.className = 'chromakey-tile';
                 tile.style.cssText = `
                     width: ${size}px;
                     height: ${size}px;
@@ -492,7 +450,6 @@
                     -webkit-tap-highlight-color: transparent;
                 `;
 
-                // Use event delegation for better performance
                 tile.addEventListener('mouseenter', this.handleTileHover);
                 tile.addEventListener('mouseleave', this.handleTileLeave);
                 tile.addEventListener('click', () => GameEvents.handleTileClick(index, color, oddColor));
@@ -568,18 +525,16 @@
 
             showLeaderboardModal() {
                 Database.fetchTopScores().then(scores => {
-                    // 1) overlay (matches end‐game overlay)
                     const overlay = document.createElement('div');
                     overlay.style.cssText = `
-      position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
-      background: rgba(30,30,30,0.8);
-      backdrop-filter: blur(8px);
-      display: flex; justify-content: center; align-items: center;
-      z-index: 10001;
-    `;
-                    // prevent this click from bubbling out to your outside‐click listener
+                        position: fixed;
+                        top: 0; left: 0;
+                        width: 100vw; height: 100vh;
+                        background: rgba(30,30,30,0.8);
+                        backdrop-filter: blur(8px);
+                        display: flex; justify-content: center; align-items: center;
+                        z-index: 10001;
+                    `;
                     overlay.addEventListener('click', e => {
                         if (e.target === overlay) {
                             e.stopPropagation();
@@ -587,50 +542,43 @@
                         }
                     });
 
-                    // 2) modal (now auto‐sized, just a max)
                     const modal = document.createElement('div');
                     modal.style.cssText = `
-      position: relative;
-      background: linear-gradient(to bottom right,#222,#333);
-      color: #f0f0f0;
-      padding: 32px;
-      border-radius: 24px;
-      box-shadow: 0 12px 24px rgba(0,0,0,0.25);
-      text-align: center;
-      max-width: 90vw;
-      font-family: 'Segoe UI', sans-serif;
-      border: 1px solid rgba(255,255,255,0.1);
-    `;
+                        position: relative;
+                        background: linear-gradient(to bottom right,#222,#333);
+                        color: #f0f0f0;
+                        padding: 32px;
+                        border-radius: 24px;
+                        box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+                        text-align: center;
+                        max-width: 90vw;
+                        font-family: 'Segoe UI', sans-serif;
+                        border: 1px solid rgba(255,255,255,0.1);
+                    `;
                     overlay.appendChild(modal);
 
-                    // 3) close “×” button
                     const closeBtn = document.createElement('button');
                     closeBtn.textContent = '×';
                     closeBtn.style.cssText = `
-      position: absolute;
-      top: 12px; right: 12px;
-      background: transparent;
-      border: none;
-      color: #f0f0f0;
-      font-size: 24px;
-      cursor: pointer;
-    `;
+                        position: absolute;
+                        top: 12px; right: 12px;
+                        background: transparent;
+                        border: none;
+                        color: #f0f0f0;
+                        font-size: 24px;
+                        cursor: pointer;
+                    `;
                     closeBtn.addEventListener('click', e => {
-                        e.stopPropagation();      // again stop the outside‐click listener
+                        e.stopPropagation();
                         overlay.remove();
                     });
                     modal.appendChild(closeBtn);
 
-                    // 4) header
                     const header = document.createElement('h2');
                     header.textContent = 'Leaderboard';
-                    header.style.cssText = `
-      margin: 0 0 16px;
-      font-size: 24px;
-    `;
+                    header.style.cssText = `margin: 0 0 16px; font-size: 24px;`;
                     modal.appendChild(header);
 
-                    // 5) entries
                     scores.forEach((s,i) => {
                         const p = document.createElement('p');
                         p.textContent = `#${i+1}: ${s.name || 'Anon'} — ${s.score} pts (Round ${s.round})`;
@@ -676,12 +624,10 @@
                 gameState.score += roundScore;
                 gameState.roundComplete = true;
 
-                // Visual feedback
                 const tile = gameState.tiles[index];
                 tile.style.border = '4px solid white';
                 tile.style.transform = 'scale(1.1)';
 
-                // Proceed to next round
                 setTimeout(() => {
                     if (!gameState.isGameOver) {
                         gameState.roundNumber++;
@@ -693,7 +639,6 @@
             handleIncorrectChoice() {
                 gameState.isGameOver = true;
 
-                // Highlight the correct tile
                 if (gameState.oddTileIndex >= 0 && gameState.tiles[gameState.oddTileIndex]) {
                     gameState.tiles[gameState.oddTileIndex].style.border = '4px solid white';
                 }
@@ -722,15 +667,12 @@
             }
         };
 
-        // ==================================
-        // === GAME FLOW (OddOneOut) =======
-        // ==================================
+        // === GAME FLOW (ChromaKey) ===
         const GameFlow = {
             startGame() {
-                // → 1) Instant “knockout” notifications for me
                 whenFirebaseReady(db => {
-                    const me = window.playerNameOO; // e.g. "Tyler L"
-                    db.collection('OOO_notifications')
+                    const me = window.playerNameCK;
+                    db.collection('CK_notifications')
                         .where('user', '==', me)
                         .onSnapshot(snapshot => {
                         snapshot.docChanges().forEach(change => {
@@ -742,16 +684,14 @@
                     }, console.error);
                 });
 
-                // → 2) Cleanup old scores, then start fresh
-                whenFirebaseReady(db => cleanupOddOneOut(db));
-                gameState.playerName = window.playerNameOO || 'Player';
+                whenFirebaseReady(db => cleanupChromaKey(db));
+                gameState.playerName = window.playerNameCK || 'Player';
                 if (gameState.gameActive) return;
 
                 gameState.gameActive = true;
                 gameState.roundNumber = 1;
                 gameState.score = 0;
 
-                // Build and show the game container
                 gameState.gameContainer = UI.createGameContainer();
                 document.body.appendChild(gameState.gameContainer);
 
@@ -766,27 +706,24 @@
                     roundData.colors, roundData.gridSize, roundData.oddColor
                 );
 
-                // clear & insert grid
                 gameState.gameContainer.innerHTML = '';
                 gameState.gameContainer.appendChild(gridContainer);
 
-                // ← add this:
                 const lbBtn = document.createElement('button');
-                lbBtn.id = 'ooo-view-leaderboard-btn';
+                lbBtn.id = 'ck-view-leaderboard-btn';
                 lbBtn.textContent = 'View Leaderboard';
                 Object.assign(lbBtn.style, {
-                    margin: '20px auto 0',        // gives space above and centers horizontally
-                    display: 'block',             // needed for auto margins to work
+                    margin: '20px auto 0',
+                    display: 'block',
                     padding: '8px 16px',
                     border: 'none',
                     borderRadius: '8px',
-                    background: '#fff',            // white background
-                    color: '#000',                 // black text
+                    background: '#fff',
+                    color: '#000',
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'transform 0.1s ease, box-shadow 0.1s ease',
                 });
-                // hover effect
                 lbBtn.addEventListener('mouseenter', () => {
                     lbBtn.style.transform = 'translateY(-2px)';
                     lbBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
@@ -795,7 +732,6 @@
                     lbBtn.style.transform = 'translateY(0)';
                     lbBtn.style.boxShadow = 'none';
                 });
-                // click (press) effect
                 lbBtn.addEventListener('mousedown', () => {
                     lbBtn.style.transform = 'translateY(1px)';
                 });
@@ -806,7 +742,6 @@
                 lbBtn.addEventListener('click', () => UI.showLeaderboardModal());
                 gameState.gameContainer.appendChild(lbBtn);
 
-                // update state...
                 gameState.tiles = tiles;
                 gameState.roundComplete = false;
                 gameState.isGameOver = false;
@@ -814,11 +749,10 @@
             },
 
             endGame() {
-                const oldLb = document.getElementById('ooo-view-leaderboard-btn');
+                const oldLb = document.getElementById('ck-view-leaderboard-btn');
                 if (oldLb) oldLb.remove();
                 const { overlay, modal } = UI.createGameOverModal(gameState.score, gameState.roundNumber);
 
-                // 1) Click outside → reset
                 overlay.addEventListener('click', e => {
                     if (e.target === overlay) {
                         overlay.remove();
@@ -826,14 +760,12 @@
                     }
                 });
 
-                // 2) Replay button
                 modal.querySelector('.replay-btn').addEventListener('click', () => {
                     overlay.remove();
                     this.resetGame();
                     setTimeout(() => this.startGame(), 0);
                 });
 
-                // 3) View Board button
                 const viewBoardBtn = document.createElement('button');
                 viewBoardBtn.textContent = 'View Board';
                 Object.assign(viewBoardBtn.style, {
@@ -847,7 +779,6 @@
                     cursor: 'pointer',
                     transition: 'transform 0.1s ease, box-shadow 0.1s ease'
                 });
-                // hover effects
                 viewBoardBtn.addEventListener('mouseenter', () => {
                     viewBoardBtn.style.transform = 'translateY(-2px)';
                     viewBoardBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
@@ -859,10 +790,8 @@
 
                 viewBoardBtn.addEventListener('click', e => {
                     e.stopPropagation();
-                    // detach overlay so the board remains
                     overlay.remove();
 
-                    // create View Results button under the board
                     const viewResultsBtn = document.createElement('button');
                     viewResultsBtn.textContent = 'View Results';
                     Object.assign(viewResultsBtn.style, {
@@ -887,7 +816,6 @@
                     });
                     viewResultsBtn.addEventListener('click', e => {
                         e.stopPropagation();
-                        // re-attach the overlay
                         document.body.appendChild(overlay);
                         viewResultsBtn.remove();
                     });
@@ -896,16 +824,14 @@
                 });
 
                 modal.appendChild(viewBoardBtn);
-
-                // 4) show overlay
                 document.body.appendChild(overlay);
 
-                // 5) submit & fetch leaderboard as before
                 Database.submitScore(gameState.score, gameState.roundNumber)
                     .then(() => Database.fetchTopScores())
                     .then(scores => UI.updateLeaderboard(modal, scores))
                     .catch(err => console.error('Failed to load leaderboard:', err));
             },
+
             resetGame() {
                 GameEvents.removeOutsideClickListener();
 
@@ -922,7 +848,7 @@
             submitScore(score, round) {
                 return new Promise((resolve, reject) => {
                     whenFirebaseReady(db =>
-                                      db.collection('OOO_scores').add({
+                                      db.collection('ChromaKey_scores').add({
                         name: gameState.playerName,
                         score,
                         round,
@@ -938,7 +864,7 @@
                 return new Promise(resolve => {
                     whenFirebaseReady(async db => {
                         try {
-                            const snap = await db.collection('OOO_scores')
+                            const snap = await db.collection('ChromaKey_scores')
                             .orderBy('score','desc')
                             .limit(limit)
                             .get();
@@ -950,6 +876,7 @@
                 });
             }
         };
+
         window.startGame = GameFlow.startGame.bind(GameFlow);
     })();
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Banners_Master
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  Allows user to edit and delete banners
 // @match        https://madame.ynap.biz/*
 // @grant        none
@@ -12,17 +12,51 @@
     'use strict';
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 1) FIREBASE SETUP
+    // 1) OPTIMIZED FIREBASE SETUP
     // ──────────────────────────────────────────────────────────────────────────
-    const LIBS = [
-        'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-        'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'
-    ];
-    for (const src of LIBS) {
-        if (![...document.scripts].some(s => s.src === src)) {
-            const s = document.createElement('script');
-            s.src = src;
-            document.head.prepend(s);
+    function loadFirebaseIfNeeded() {
+        // Check if Firebase is already available
+        if (window.firebase?.initializeApp && window.firebase?.firestore) {
+            console.log('[BannersMaster] ✅ Firebase already loaded by another script');
+            initFirebase();
+            return;
+        }
+
+        // Only load what we need (no auth required for banner management)
+        const LIBS = [
+            'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+            'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'
+        ];
+
+        let loadedCount = 0;
+        const totalLibs = LIBS.length;
+
+        for (const src of LIBS) {
+            // Check if script is already loaded
+            if ([...document.scripts].some(s => s.src === src)) {
+                loadedCount++;
+                if (loadedCount === totalLibs) {
+                    setTimeout(initFirebase, 100);
+                }
+                continue;
+            }
+
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedCount++;
+                if (loadedCount === totalLibs) {
+                    setTimeout(initFirebase, 100);
+                }
+            };
+            script.onerror = () => {
+                console.error('[BannersMaster] Failed to load Firebase script:', src);
+                loadedCount++;
+                if (loadedCount === totalLibs) {
+                    setTimeout(initFirebase, 100);
+                }
+            };
+            document.head.prepend(script);
         }
     }
 
@@ -34,20 +68,38 @@
         messagingSenderId: '968504770003',
         appId: '1:968504770003:web:afa2c955c6658ff761c326'
     };
-    const APP_NAME = 'bannerApp';
+    const APP_NAME = 'bannerMasterApp';
     let db;
 
-    (function waitForFirebase() {
-        if (window.firebase?.initializeApp) {
-            if (!firebase.apps.find(a => a.name === APP_NAME)) {
-                firebase.initializeApp(firebaseConfig, APP_NAME);
-            }
-            db = firebase.app(APP_NAME).firestore();
-            init();
-        } else {
-            setTimeout(waitForFirebase, 100);
+    function initFirebase() {
+        if (!window.firebase?.initializeApp) {
+            console.error('[BannersMaster] Firebase not available');
+            return;
         }
-    })();
+
+        try {
+            // Check if our app already exists
+            let app;
+            try {
+                app = firebase.app(APP_NAME);
+                console.log('[BannersMaster] ✅ Using existing Firebase app');
+            } catch (e) {
+                // App doesn't exist, create it
+                app = firebase.initializeApp(firebaseConfig, APP_NAME);
+                console.log('[BannersMaster] ✅ Created new Firebase app');
+            }
+
+            if (window.firebase.firestore) {
+                db = app.firestore();
+                console.log('[BannersMaster] ✅ Firestore initialized');
+                init();
+            } else {
+                console.error('[BannersMaster] Firestore not available');
+            }
+        } catch (error) {
+            console.error('[BannersMaster] Firebase initialization error:', error);
+        }
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // 2) COMMON UTILITIES
@@ -85,45 +137,45 @@
     function buildModal() {
         modalBg = document.createElement('div');
         modalBg.style.cssText = `
-  position:fixed; inset:0; display:none;
-  align-items:center; justify-content:center;
-  z-index:2147483647;
-`;
+            position:fixed; inset:0; display:none;
+            align-items:center; justify-content:center;
+            z-index:2147483647;
+        `;
         modal = document.createElement('div');
         modal.style.cssText = `
-      background:rgba(255,255,255,0.25);
-      backdrop-filter:blur(10px) saturate(150%);
-      padding:20px; border-radius:12px;
-      max-width:480px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);
-      color:#000;
-    `;
+            background:rgba(255,255,255,0.25);
+            backdrop-filter:blur(10px) saturate(150%);
+            padding:20px; border-radius:12px;
+            max-width:480px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);
+            color:#000;
+        `;
         modal.innerHTML = `
-      <h3 style="margin:0 0 12px; font-size:1.2rem;">Edit Banner</h3>
-      <label>Message:</label><br>
-      <textarea id="bn-msg" style="width:100%;height:100px;margin:8px 0;padding:8px;
-        resize:vertical;border:none;border-radius:6px;background:rgba(255,255,255,0.6);
-        font-size:.95rem;"></textarea>
-      <label>Background Color:</label>
-      <div id="bn-swatches" style="display:flex;flex-wrap:wrap;margin:8px 0;"></div>
-      <label>Link (URL):</label><br>
-      <input id="bn-link" type="text" placeholder="https://example.com" style="
-        width:100%;padding:8px;border:none;border-radius:6px;
-        background:rgba(255,255,255,0.6);font-size:.95rem;margin-bottom:12px;
-      "/>
-      <div style="text-align:right;">
-        <button id="bn-save" style="
-          padding:8px 14px;margin-right:8px;border:none;border-radius:6px;
-          background:rgba(25,118,210,0.8);color:#fff;font-size:.95rem;cursor:pointer;
-        ">Save</button>
-        <button id="bn-cancel" style="
-          padding:8px 14px;border:none;border-radius:6px;
-          background:rgba(200,200,200,0.6);color:#000;font-size:.95rem;cursor:pointer;
-        ">Cancel</button>
-      </div>
-      <hr style="margin:16px 0;border:none;border-top:1px solid rgba(0,0,0,0.2);" />
-      <h4 style="margin:0 0 8px;font-size:1rem;">All Page Banners</h4>
-      <div id="bn-page-list" style="max-height:200px;overflow:auto;"></div>
-    `;
+            <h3 style="margin:0 0 12px; font-size:1.2rem;">Edit Banner</h3>
+            <label>Message:</label><br>
+            <textarea id="bn-msg" style="width:100%;height:100px;margin:8px 0;padding:8px;
+                resize:vertical;border:none;border-radius:6px;background:rgba(255,255,255,0.6);
+                font-size:.95rem;"></textarea>
+            <label>Background Color:</label>
+            <div id="bn-swatches" style="display:flex;flex-wrap:wrap;margin:8px 0;"></div>
+            <label>Link (URL):</label><br>
+            <input id="bn-link" type="text" placeholder="https://example.com" style="
+                width:100%;padding:8px;border:none;border-radius:6px;
+                background:rgba(255,255,255,0.6);font-size:.95rem;margin-bottom:12px;
+            "/>
+            <div style="text-align:right;">
+                <button id="bn-save" style="
+                    padding:8px 14px;margin-right:8px;border:none;border-radius:6px;
+                    background:rgba(25,118,210,0.8);color:#fff;font-size:.95rem;cursor:pointer;
+                ">Save</button>
+                <button id="bn-cancel" style="
+                    padding:8px 14px;border:none;border-radius:6px;
+                    background:rgba(200,200,200,0.6);color:#000;font-size:.95rem;cursor:pointer;
+                ">Cancel</button>
+            </div>
+            <hr style="margin:16px 0;border:none;border-top:1px solid rgba(0,0,0,0.2);" />
+            <h4 style="margin:0 0 8px;font-size:1rem;">All Page Banners</h4>
+            <div id="bn-page-list" style="max-height:200px;overflow:auto;"></div>
+        `;
         modalBg.appendChild(modal);
 
         const attach = () => {
@@ -142,7 +194,7 @@
         colors.forEach(col=>{
             const sw=document.createElement('div');
             sw.style.cssText=`width:24px;height:24px;margin:4px;border-radius:4px;
-        background:${col};cursor:pointer;border:2px solid transparent;`;
+                background:${col};cursor:pointer;border:2px solid transparent;`;
             sw.addEventListener('click',()=>{
                 swWrap.querySelectorAll('div').forEach(d=>d.style.border='2px solid transparent');
                 sw.style.border='2px solid #000';
@@ -179,6 +231,11 @@
     }
 
     function saveModal() {
+        if (!db) {
+            console.error('[BannersMaster] Database not available');
+            return;
+        }
+
         const id = modalBg.dataset.current;
         const msg = modal.querySelector('#bn-msg').value;
         const raw = modal.querySelector('#bn-link').value.trim();
@@ -186,13 +243,19 @@
         const key = id==='global' ? 'global' : 'page-'+encodeURIComponent(location.pathname+location.search);
         const data = {message:msg,link};
         if(selectedColor) data.bgColor=selectedColor;
+
         db.doc('banners/'+key).set(data,{merge:true})
-            .then(()=>console.log('[Banner] • saved',key))
-            .catch(e=>console.error(e));
+            .then(()=>console.log('[BannersMaster] • saved',key))
+            .catch(e=>console.error('[BannersMaster] Save error:',e));
         modalBg.style.display='none';
     }
 
     function loadPageList() {
+        if (!db) {
+            console.error('[BannersMaster] Database not available for loading page list');
+            return;
+        }
+
         const listEl = modal.querySelector('#bn-page-list');
         listEl.textContent='Loading…';
         db.collection('banners').get().then(snap=>{
@@ -216,14 +279,21 @@
                 const del=document.createElement('button');
                 del.textContent='Delete';
                 del.style.cssText=`padding:6px 10px;border:none;border-radius:4px;
-          background:rgba(25,118,210,0.8);color:#fff;cursor:pointer;font-size:.9rem;`;
+                    background:rgba(25,118,210,0.8);color:#fff;cursor:pointer;font-size:.9rem;`;
                 del.onclick=e=>{
                     e.stopPropagation();
-                    if(confirm(`Delete banner for ${display}?`)) db.doc(`banners/${key}`).delete().then(loadPageList);
+                    if(confirm(`Delete banner for ${display}?`)) {
+                        db.doc(`banners/${key}`).delete()
+                            .then(loadPageList)
+                            .catch(err => console.error('[BannersMaster] Delete error:', err));
+                    }
                 };
                 row.append(linkA,del);
                 listEl.appendChild(row);
             });
+        }).catch(err => {
+            console.error('[BannersMaster] Error loading page list:', err);
+            listEl.textContent = 'Error loading banners';
         });
     }
 
@@ -233,13 +303,14 @@
     function injectDockStyles() {
         const style=document.createElement('style');
         style.textContent=`
-#floating-glass-dock::before{content:'';position:absolute;inset:0;border-radius:inherit;
-  background:linear-gradient(135deg,rgba(255,0,150,0.2),rgba(0,200,255,0.2));
-  mix-blend-mode:screen;opacity:0.3;pointer-events:none;filter:blur(6px);}
-.dock-tooltip{position:fixed;background:rgba(0,0,0,0.85);color:#fff;padding:4px 8px;
-  border-radius:6px;font-size:11px;pointer-events:none;opacity:0;transition:opacity .2s;
-  z-index:10001;white-space:nowrap;}
-.dock-icon-wrapper:hover svg,.dock-icon-wrapper:hover .material-icons{transform:scale(1.25);}`;
+            #floating-glass-dock::before{content:'';position:absolute;inset:0;border-radius:inherit;
+                background:linear-gradient(135deg,rgba(255,0,150,0.2),rgba(0,200,255,0.2));
+                mix-blend-mode:screen;opacity:0.3;pointer-events:none;filter:blur(6px);}
+            .dock-tooltip{position:fixed;background:rgba(0,0,0,0.85);color:#fff;padding:4px 8px;
+                border-radius:6px;font-size:11px;pointer-events:none;opacity:0;transition:opacity .2s;
+                z-index:10001;white-space:nowrap;}
+            .dock-icon-wrapper:hover svg,.dock-icon-wrapper:hover .material-icons{transform:scale(1.25);}
+        `;
         document.head.appendChild(style);
     }
 
@@ -296,17 +367,23 @@
                       `<span class="material-icons">delete</span>`,
                       'Delete Global Banner',
                       () => {
-            if (confirm('Delete Global Banner?')) {
-                const wrap = document.getElementById('bn-global');
-                db.doc('banners/global').delete().then(() => {
-                    // clear the DOM immediately
-                    wrap.querySelector('span').textContent = '';
-                    wrap.dataset.link = '';
-                    wrap.style.display = 'none';
-                    console.log('[Banner] Global banner deleted');
-                });
-            }
-        }
+                          if (!db) {
+                              console.error('[BannersMaster] Database not available');
+                              return;
+                          }
+                          if (confirm('Delete Global Banner?')) {
+                              const wrap = document.getElementById('bn-global');
+                              db.doc('banners/global').delete().then(() => {
+                                  // clear the DOM immediately
+                                  wrap.querySelector('span').textContent = '';
+                                  wrap.dataset.link = '';
+                                  wrap.style.display = 'none';
+                                  console.log('[BannersMaster] Global banner deleted');
+                              }).catch(err => {
+                                  console.error('[BannersMaster] Delete error:', err);
+                              });
+                          }
+                      }
                      );
 
         // ---- DIVIDER ----
@@ -336,18 +413,23 @@
                       `<span class="material-icons">delete</span>`,
                       'Delete Page Banner',
                       () => {
-            const key = 'page-' + encodeURIComponent(location.pathname + location.search);
-            if (confirm('Delete Page Banner?')) {
-                const key = 'page-'+encodeURIComponent(location.pathname+location.search);
-                const wrap = document.getElementById('bn-page');
-                db.doc(`banners/${key}`).delete().then(() => {
-                    wrap.querySelector('span').textContent = '';
-                    wrap.dataset.link = '';
-                    wrap.style.display = 'none';
-                    console.log(`[Banner] Page banner deleted (${key})`);
-                });
-            }
-        }
+                          if (!db) {
+                              console.error('[BannersMaster] Database not available');
+                              return;
+                          }
+                          if (confirm('Delete Page Banner?')) {
+                              const key = 'page-'+encodeURIComponent(location.pathname+location.search);
+                              const wrap = document.getElementById('bn-page');
+                              db.doc(`banners/${key}`).delete().then(() => {
+                                  wrap.querySelector('span').textContent = '';
+                                  wrap.dataset.link = '';
+                                  wrap.style.display = 'none';
+                                  console.log(`[BannersMaster] Page banner deleted (${key})`);
+                              }).catch(err => {
+                                  console.error('[BannersMaster] Delete error:', err);
+                              });
+                          }
+                      }
                      );
     }
 
@@ -375,6 +457,11 @@
     // 6) INIT
     // ──────────────────────────────────────────────────────────────────────────
     function init(){
+        if (!db) {
+            console.error('[BannersMaster] Database not initialized');
+            return;
+        }
+
         buildModal();
 
         const {wrap: globalBanner, txt: globalTxt} = makeBanner('global');
@@ -390,7 +477,10 @@
                 globalBanner.dataset.link=d.link||'';
                 updateClick(globalBanner);
             } else globalBanner.style.display='none';
+        }, error => {
+            console.error('[BannersMaster] Global banner subscription error:', error);
         });
+
         let unsubPage;
         function subscribePage(){
             const key='page-'+encodeURIComponent(location.pathname+location.search);
@@ -404,6 +494,8 @@
                     pageBanner.dataset.link=d.link||'';
                     updateClick(pageBanner);
                 } else pageBanner.style.display='none';
+            }, error => {
+                console.error('[BannersMaster] Page banner subscription error:', error);
             });
         }
         subscribePage();
@@ -428,4 +520,9 @@
         buildDockControls(dock,tooltip);
         setupDockReveal(dock,tooltip);
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 7) START INITIALIZATION
+    // ──────────────────────────────────────────────────────────────────────────
+    loadFirebaseIfNeeded();
 })();

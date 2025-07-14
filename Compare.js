@@ -1,9 +1,8 @@
 // ==UserScript==
 // @name         Compare
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.2
 // @description  Select up to 5 VIDs and open a comparison tab with images
-// @author       Tyler
 // @match        https://madame.ynap.biz/worklist/*
 // @grant        none
 // ==/UserScript==
@@ -11,23 +10,31 @@
 (function () {
     'use strict';
 
+    let isScriptRunning = false;
+    let selectedImages = [];
+    let selectedVIDs = [];
+    let imageListenerInterval;
+
     function checkForClass() {
         return document.querySelector('.MuiBox-root.css-7v0sgd') !== null;
     }
 
-    function waitForClass() {
+    function waitForClassAndRun() {
         const interval = setInterval(() => {
             if (checkForClass()) {
                 clearInterval(interval);
-                startScript();
+                if (!isScriptRunning) {
+                    startScript();
+                }
             }
         }, 100);
     }
 
     function startScript() {
+        if (isScriptRunning) return;
+        isScriptRunning = true;
+
         const worklistId = window.location.pathname.match(/worklist\/(\d+)/)?.[1] || '';
-        let selectedImages = [];
-        let selectedVIDs = [];
 
         function createButton(text, onClick) {
             const btn = document.createElement('button');
@@ -52,7 +59,11 @@
             });
         }
 
-        setInterval(addClickListeners, 1000);
+        // Clear any existing interval before creating a new one
+        if (imageListenerInterval) {
+            clearInterval(imageListenerInterval);
+        }
+        imageListenerInterval = setInterval(addClickListeners, 1000);
 
         function onImageClick(event) {
             const image = event.target;
@@ -127,52 +138,62 @@
         }
 
         function addCompareButton() {
+            // Remove existing button if it exists
+            const existingButton = document.getElementById('compareButton');
+            if (existingButton) {
+                existingButton.remove();
+            }
+
             const gridContainer = document.querySelector('.MuiGrid-root.MuiGrid-container.MuiGrid-direction-xs-row.css-mzvwjm');
             const targetElement = document.querySelector('.MuiGrid-root.MuiGrid-direction-xs-row.css-c9cix2');
 
-            if (gridContainer && targetElement && !document.getElementById('compareButton')) {
+            if (gridContainer && targetElement) {
                 const compareButton = createButton('Compare', () => {});
                 compareButton.id = 'compareButton';
 
-                const style = document.createElement('style');
-                style.textContent = `
-                    .compare-button {
-                        margin: 0 5px;
-                        padding: 4px 10px;
-                        height: 32px;
-                        line-height: 1.2;
-                        font-size: 0.8125rem;
-                        font-weight: 500;
-                        border-radius: 8px;
-                        background-color: #f5f5f5;
-                        border: 1px solid rgba(0, 0, 0, 0.23);
-                        color: rgba(0, 0, 0, 0.87);
-                        cursor: pointer;
-                        transition: all 0.3s ease;
-                        position: relative;
-                        z-index: 1000;
-                    }
-                    .compare-button:hover {
-                        background-color: #e0e0e0;
-                        border-color: rgba(0, 0, 0, 0.4);
-                    }
-                    .compare-button.compare-active {
-                        background-color: rgba(0, 255, 195, 0.15);
-                        border: 2px solid rgba(0, 255, 195, 0.6);
-                        color: #00695c;
-                        font-weight: 600;
-                        box-shadow: 0 0 0 1px rgba(0, 255, 195, 0.3), 0 4px 12px rgba(0, 255, 195, 0.25);
-                    }
-                    .compare-button.compare-active:hover {
-                        background-color: rgba(0, 255, 195, 0.25);
-                        border-color: rgba(0, 255, 195, 0.8);
-                        box-shadow: 0 0 0 1px rgba(0, 255, 195, 0.4), 0 6px 16px rgba(0, 255, 195, 0.35);
-                    }
-                    .compare-button.clicked {
-                        transform: scale(0.95);
-                    }
-                `;
-                document.head.appendChild(style);
+                // Only add styles if they don't exist
+                if (!document.getElementById('compare-button-styles')) {
+                    const style = document.createElement('style');
+                    style.id = 'compare-button-styles';
+                    style.textContent = `
+                        .compare-button {
+                            margin: 0 5px;
+                            padding: 4px 10px;
+                            height: 32px;
+                            line-height: 1.2;
+                            font-size: 0.8125rem;
+                            font-weight: 500;
+                            border-radius: 8px;
+                            background-color: #f5f5f5;
+                            border: 1px solid rgba(0, 0, 0, 0.23);
+                            color: rgba(0, 0, 0, 0.87);
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            position: relative;
+                            z-index: 1000;
+                        }
+                        .compare-button:hover {
+                            background-color: #e0e0e0;
+                            border-color: rgba(0, 0, 0, 0.4);
+                        }
+                        .compare-button.compare-active {
+                            background-color: rgba(0, 255, 195, 0.15);
+                            border: 2px solid rgba(0, 255, 195, 0.6);
+                            color: #00695c;
+                            font-weight: 600;
+                            box-shadow: 0 0 0 1px rgba(0, 255, 195, 0.3), 0 4px 12px rgba(0, 255, 195, 0.25);
+                        }
+                        .compare-button.compare-active:hover {
+                            background-color: rgba(0, 255, 195, 0.25);
+                            border-color: rgba(0, 255, 195, 0.8);
+                            box-shadow: 0 0 0 1px rgba(0, 255, 195, 0.4), 0 6px 16px rgba(0, 255, 195, 0.35);
+                        }
+                        .compare-button.clicked {
+                            transform: scale(0.95);
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
 
                 compareButton.addEventListener('click', (e) => {
                     compareButton.classList.add('clicked');
@@ -293,8 +314,21 @@
         function checkImageAvailability(url) {
             return new Promise(resolve => {
                 const img = new Image();
-                img.onload = () => resolve(true);
-                img.onerror = () => resolve(false);
+                img.onload = () => {
+                    resolve(true);
+                    img.src = ''; // Clear to prevent memory leaks
+                };
+                img.onerror = () => {
+                    resolve(false);
+                    img.src = ''; // Clear to prevent memory leaks
+                };
+                // Set a timeout to avoid hanging requests
+                setTimeout(() => {
+                    if (img.complete === false) {
+                        img.src = '';
+                        resolve(false);
+                    }
+                }, 3000);
                 img.src = url;
             });
         }
@@ -415,8 +449,58 @@
             });
         }
 
+        // Monitor for DOM changes to re-add button when needed
+        const observer = new MutationObserver((mutations) => {
+            let shouldCheckButton = false;
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    shouldCheckButton = true;
+                }
+            });
+
+            if (shouldCheckButton) {
+                setTimeout(() => {
+                    const existingButton = document.getElementById('compareButton');
+                    const gridContainer = document.querySelector('.MuiGrid-root.MuiGrid-container.MuiGrid-direction-xs-row.css-mzvwjm');
+
+                    if (!existingButton && gridContainer) {
+                        addCompareButton();
+                    }
+                }, 100);
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
         addCompareButton();
     }
 
-    waitForClass();
+    // Function to reset and restart the script
+    function resetAndRestart() {
+        isScriptRunning = false;
+        selectedImages = [];
+        selectedVIDs = [];
+
+        if (imageListenerInterval) {
+            clearInterval(imageListenerInterval);
+        }
+
+        waitForClassAndRun();
+    }
+
+    // Listen for URL changes (for React Router navigation)
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+        const url = location.href;
+        if (url !== lastUrl) {
+            lastUrl = url;
+            setTimeout(resetAndRestart, 500); // Small delay to let React finish rendering
+        }
+    }).observe(document, { subtree: true, childList: true });
+
+    // Initial start
+    waitForClassAndRun();
 })();

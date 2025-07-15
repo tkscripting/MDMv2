@@ -7,4 +7,4 @@
 // @grant        none
 // ==/UserScript==
 
-alert('This script loaded');
+alert('Did it update');

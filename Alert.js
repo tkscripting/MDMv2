@@ -7,4 +7,4 @@
 // @grant        none
 // ==/UserScript==
 
-alert('Surely this will work');
+alert('Last one');

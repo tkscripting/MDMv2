@@ -349,10 +349,10 @@
     hdr.style.cssText = 'font-weight:600; font-size:16px; margin-bottom:12px; text-align:center;';
     box.appendChild(hdr);
 
-    // List entries
-    items.forEach(({ vid, brand }) => {
+    // List entries with numbering
+    items.forEach(({ vid, brand }, index) => {
       const line = document.createElement('div');
-      line.textContent = `${vid} – ${brand}`;
+      line.textContent = `${index + 1}. ${vid} – ${brand}`;
       line.style.margin = '4px 0';
       box.appendChild(line);
     });
@@ -361,16 +361,16 @@
     const copyBtn = createCopyButton('COPY', async () => {
       const ids = items.map(i => i.vid).join(',');
       const url = `https://madame.ynap.biz/shooting-validation?id=${ids}`;
-      const listText = items.map(i => `${i.vid} – ${i.brand}`).join('\n');
 
-      // HTML: two <br> between link and list
+      // HTML: two <br> between link and numbered list
       const html =
         `<div style="font-family:Aptos, sans-serif; line-height:1.4;">` +
           `<a href="${url}">Madame</a><br><br>` +
-          items.map(i => `${i.vid} – ${i.brand}`).join('<br>') +
+          items.map((i, index) => `${index + 1}. ${i.vid} – ${i.brand}`).join('<br>') +
         `</div>`;
 
-      // Plain text: two newlines between URL and list
+      // Plain text: two newlines between URL and numbered list
+      const listText = items.map((i, index) => `${index + 1}. ${i.vid} – ${i.brand}`).join('\n');
       const plain = `${url}\n\n${listText}`;
 
       try {

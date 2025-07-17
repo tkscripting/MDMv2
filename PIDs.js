@@ -20,16 +20,34 @@
     /////////////////////
 
     function simulateReactInput(element, value) {
-        const prototype = element instanceof HTMLTextAreaElement
+        if (!element) return;
+
+        try {
+            const prototype = element instanceof HTMLTextAreaElement
             ? HTMLTextAreaElement.prototype
             : HTMLInputElement.prototype;
-        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
-        if (!descriptor?.set) return;
+            const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
 
-        descriptor.set.call(element, value);
-        element.dispatchEvent(new Event('input', { bubbles: true }));
+            if (descriptor?.set) {
+                descriptor.set.call(element, value);
+            } else {
+                element.value = value;
+            }
+
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (error) {
+            console.warn('[PIDS] Input simulation failed:', error);
+            try {
+                element.value = value;
+                element.focus();
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.blur();
+            } catch (fallbackError) {
+                console.error('[PIDS] All input methods failed:', fallbackError);
+            }
+        }
     }
-
     function extractPIDsOnly(text) {
         const pids = text.match(/\b\d{6,7}\b/g);
         return pids?.length ? pids : null;
@@ -44,17 +62,17 @@
         try {
             const response = await fetch(
                 `https://matchmaker-api.product.ynapgroup.com/${matchmakerSearch}`, {
-                credentials: "omit",
-                headers: {
-                    accept: "application/json, text/plain, */*",
-                    clientid: "pidConverter",
-                    "content-type": "application/json;charset=UTF-8"
-                },
-                referrerPolicy: "no-referrer",
-                body: productStringConvert(pids),
-                method: "POST",
-                mode: "cors"
-            });
+                    credentials: "omit",
+                    headers: {
+                        accept: "application/json, text/plain, */*",
+                        clientid: "pidConverter",
+                        "content-type": "application/json;charset=UTF-8"
+                    },
+                    referrerPolicy: "no-referrer",
+                    body: productStringConvert(pids),
+                    method: "POST",
+                    mode: "cors"
+                });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
             const matches = json.matches ?? [];
@@ -75,10 +93,28 @@
         const matches = await matchmakerTranslateBatch(pids, "pids");
 
         if (matches.length > 0) {
-            const translated = matches.map(m => m.translatedId).join(' ');
-            console.log(`[PIDS] Successfully converted to VIDs:`, translated);
             e.preventDefault();
-            simulateReactInput(e.target, translated);
+
+            const vids = matches.map(m => m.translatedId);
+            console.log(`[PIDS] Successfully converted to VIDs:`, vids);
+
+            // Find the actual input element
+            let targetElement = e.target;
+            if (!targetElement.tagName || (targetElement.tagName !== 'INPUT' && targetElement.tagName !== 'TEXTAREA')) {
+                const input = targetElement.querySelector('input, textarea');
+                if (input) targetElement = input;
+            }
+
+            // Add each VID sequentially with a small delay
+            vids.forEach((vid, index) => {
+                setTimeout(() => {
+                    const currentValue = targetElement.value.trim();
+                    const newValue = currentValue ? `${currentValue} ${vid}` : vid;
+                    simulateReactInput(targetElement, newValue);
+                    console.log(`[PIDS] Added VID ${index + 1}/${vids.length}: ${vid}`);
+                }, index * 50);
+            });
+
         } else {
             console.warn("[PIDS] No VID matches found for pasted PIDs.");
             alert("No VID matches found for pasted PIDs. Please double-check at https://matchmaker.product.ynapgroup.com/");
@@ -112,19 +148,19 @@
     function matchmakerTranslate(singleProduct, matchmakerSearch) {
         return fetch(
             `https://matchmaker-api.product.ynapgroup.com/${matchmakerSearch}`, {
-            credentials: 'omit',
-            headers: {
-                accept: 'application/json, text/plain, */*',
-                clientid: 'pidConverter',
-                'content-type': 'application/json;charset=UTF-8',
-            },
-            referrerPolicy: 'no-referrer',
-            body: JSON.stringify(singleProduct),
-            method: 'POST',
-            mode: 'cors',
-        })
-        .then(res => res.json())
-        .then(json => {
+                credentials: 'omit',
+                headers: {
+                    accept: 'application/json, text/plain, */*',
+                    clientid: 'pidConverter',
+                    'content-type': 'application/json;charset=UTF-8',
+                },
+                referrerPolicy: 'no-referrer',
+                body: JSON.stringify(singleProduct),
+                method: 'POST',
+                mode: 'cors',
+            })
+            .then(res => res.json())
+            .then(json => {
             const matched = json.matches;
             if (!matched?.length) {
                 console.warn(`[PIDS] No match for`, singleProduct);
@@ -132,7 +168,7 @@
             }
             return matched[0].translatedId;
         })
-        .catch(err => {
+            .catch(err => {
             console.error('[PIDS] Matchmaker error:', err);
             return null;
         });
@@ -167,7 +203,7 @@
 
     async function addPidToWorklist() {
         const els = Array.from(document.querySelectorAll('.css-10pdxui'))
-                      .filter(el => !el.dataset.pidAdded);
+        .filter(el => !el.dataset.pidAdded);
         if (!els.length) return;
         await Promise.all(els.map(processElement));
         console.log(`[PIDS] Found ${els.length} new IDs, processed.`);
@@ -183,7 +219,7 @@
 
     function isValidPage() {
         return window.location.pathname.startsWith('/worklist/') ||
-               !!document.querySelector('#search-by-id');
+            !!document.querySelector('#search-by-id');
     }
 
     function handleKeyPress(e) {

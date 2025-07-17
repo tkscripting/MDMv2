@@ -105,15 +105,11 @@
                 if (input) targetElement = input;
             }
 
-            // Add each VID sequentially with a small delay
-            vids.forEach((vid, index) => {
-                setTimeout(() => {
-                    const currentValue = targetElement.value.trim();
-                    const newValue = currentValue ? `${currentValue} ${vid}` : vid;
-                    simulateReactInput(targetElement, newValue);
-                    console.log(`[PIDS] Added VID ${index + 1}/${vids.length}: ${vid}`);
-                }, index * 50);
-            });
+            // Paste all VIDs at once
+            const currentValue = targetElement.value.trim();
+            const newValue = currentValue ? `${currentValue} ${vids.join(' ')}` : vids.join(' ');
+            simulateReactInput(targetElement, newValue);
+            console.log(`[PIDS] Pasted all VIDs: ${vids.join(' ')}`);
 
         } else {
             console.warn("[PIDS] No VID matches found for pasted PIDs.");

@@ -49,6 +49,14 @@
         }
     }
     function extractPIDsOnly(text) {
+        // First check if the text contains any VIDs (10+ digits)
+        const vids = text.match(/\b\d{10,}\b/g);
+        if (vids && vids.length > 0) {
+            console.log('[PIDS] VIDs detected in paste, skipping conversion:', vids);
+            return null; // Don't process if VIDs are present
+        }
+
+        // Only look for PIDs if no VIDs are present
         const pids = text.match(/\b\d{6,7}\b/g);
         return pids?.length ? pids : null;
     }
@@ -86,14 +94,23 @@
 
     document.addEventListener('paste', async (e) => {
         const text = (e.clipboardData || window.clipboardData).getData('text').trim();
-        const pids = extractPIDsOnly(text);
+
+        // First check if the text contains any VIDs (10+ digits)
+        const vids = text.match(/\b\d{10,}\b/g);
+        if (vids && vids.length > 0) {
+            console.log('[PIDS] VIDs detected in paste, allowing normal paste behavior:', vids);
+            return; // Let the normal paste behavior handle VIDs
+        }
+
+        // Only look for PIDs if no VIDs are present
+        const pids = text.match(/\b\d{6,7}\b/g);
         if (!pids) return;
 
         console.log(`[PIDS] Pasted text detected with PIDs:`, pids);
         const matches = await matchmakerTranslateBatch(pids, "pids");
 
         if (matches.length > 0) {
-            e.preventDefault();
+            e.preventDefault(); // Only prevent default for PID conversion
 
             const vids = matches.map(m => m.translatedId);
             console.log(`[PIDS] Successfully converted to VIDs:`, vids);
@@ -235,13 +252,49 @@
     function handlePaste(e) {
         if (!isValidPage()) return;
         const txt = (e.clipboardData || window.clipboardData).getData('text').trim();
-        if (txt.length >= 5) processScan(txt);
+
+        // Don't process if it contains VIDs - let the normal paste or PID converter handle it
+        const vids = txt.match(/\b\d{10,}\b/g);
+        if (vids) {
+            console.log('[PIDS] VIDs detected in barcode scanner paste, skipping:', vids);
+            return;
+        }
+
+        // Only process if it looks like a PID (6-7 digits) and is long enough
+        if (txt.length >= 5 && txt.match(/^\d{6,7}$/)) {
+            processScan(txt);
+        }
     }
 
     async function processScan(input) {
-        const m = input.match(/(\d{5,7})/);
-        if (!m) return;
-        const pid = m[1];
+        // Check if input contains VIDs (10+ digits) - if so, don't process as PID
+        const vidMatch = input.match(/\b\d{10,}\b/g);
+        if (vidMatch) {
+            console.log('[PIDS] VID detected in scan, skipping PID conversion:', vidMatch);
+
+            // If we're on search page, just paste the VID directly
+            if (!window.location.pathname.startsWith('/worklist/')) {
+                const inp = document.querySelector('#search-by-id');
+                if (inp) {
+                    const setter = Object.getOwnPropertyDescriptor(
+                        Object.getPrototypeOf(inp), 'value'
+                    )?.set;
+                    if (setter) setter.call(inp, vidMatch[0]);
+                    else inp.value = vidMatch[0];
+
+                    inp.dispatchEvent(new Event('input', { bubbles: true }));
+                    inp.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('[PIDS] ✅ Pasted VID directly:', vidMatch[0]);
+                }
+            }
+            return; // Don't continue with PID processing
+        }
+
+        // Only look for PIDs if no VIDs were found
+        const pidMatch = input.match(/\b\d{6,7}\b/g);
+        if (!pidMatch) return;
+
+        const pid = pidMatch[0]; // Take the first PID found
         console.log('[PIDS] ▶ PID captured:', pid);
 
         if (window.location.pathname.startsWith('/worklist/')) {
@@ -265,8 +318,9 @@
             if (setter) setter.call(inp, vid);
             else inp.value = vid;
 
-            inp.dispatchEvent(new Event('input',  { bubbles: true }));
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
             inp.dispatchEvent(new Event('change', { bubbles: true }));
+            console.log('[PIDS] ✅ Converted PID to VID:', vid);
         }
     }
 

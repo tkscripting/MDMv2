@@ -9,25 +9,28 @@
 // ==/UserScript==
 
 (function() {
-  'use strict';
+    'use strict';
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // URL guard: run only on shooting-validation pages
+    if (!/\/shooting-validation/.test(location.pathname)) return;
 
-  // Inject Font Awesome CSS if not already present
-  function injectFontAwesome() {
-    if (document.querySelector('link[href*="font-awesome"]')) return;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css';
-    document.head.appendChild(link);
-  }
+    // Inject Font Awesome CSS if not already present
+    function injectFontAwesome() {
+        if (document.querySelector('link[href*="font-awesome"]')) return;
 
-  // Create generate button with icon
-  function createGenerateButton(text, onClick) {
-    const button = document.createElement('button');
-    button.className = 'cssbuttons-io-button';
-    button.innerHTML = `
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css';
+        document.head.appendChild(link);
+    }
+
+    // Create generate button with icon
+    function createGenerateButton(text, onClick) {
+        const button = document.createElement('button');
+        button.className = 'cssbuttons-io-button';
+        button.innerHTML = `
       ${text}
       <div class="icon">
         <svg height="24" width="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -35,15 +38,15 @@
         </svg>
       </div>
     `;
-    button.addEventListener('click', onClick);
-    return button;
-  }
+        button.addEventListener('click', onClick);
+        return button;
+    }
 
-  // Create copy button with animated states
-  function createCopyButton(text, onClick) {
-    const button = document.createElement('button');
-    button.className = 'copy-button';
-    button.innerHTML = `
+    // Create copy button with animated states
+    function createCopyButton(text, onClick) {
+        const button = document.createElement('button');
+        button.className = 'copy-button';
+        button.innerHTML = `
       <span>COPY</span>
       <div class="copy-icon">
         <svg class="copy-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -53,26 +56,26 @@
       </div>
     `;
 
-    button.addEventListener('click', async (e) => {
-      await onClick(e);
-      // Add success state
-      button.classList.add('success');
-      // Remove success state after 2 seconds
-      setTimeout(() => {
-        button.classList.remove('success');
-      }, 2000);
-    });
+        button.addEventListener('click', async (e) => {
+            await onClick(e);
+            // Add success state
+            button.classList.add('success');
+            // Remove success state after 2 seconds
+            setTimeout(() => {
+                button.classList.remove('success');
+            }, 2000);
+        });
 
-    return button;
-  }
+        return button;
+    }
 
-  // Inject CSS styles for buttons
-  function injectStyles() {
-    if (document.getElementById('button-styles')) return;
+    // Inject CSS styles for buttons
+    function injectStyles() {
+        if (document.getElementById('button-styles')) return;
 
-    const style = document.createElement('style');
-    style.id = 'button-styles';
-    style.textContent = `
+        const style = document.createElement('style');
+        style.id = 'button-styles';
+        style.textContent = `
       .cssbuttons-io-button {
         background: transparent;
         color: #212121;
@@ -266,185 +269,185 @@
         -ms-overflow-style: none !important;
       }
     `;
-    document.head.appendChild(style);
-  }
-
-  // Find scrollable container for loading more content
-  function findScrollableContainer() {
-    for (const el of document.querySelectorAll('*')) {
-      const s = getComputedStyle(el);
-      if ((s.overflow === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
-        return el;
-      }
-    }
-    return document.documentElement;
-  }
-
-  // Ensure all VIDs are loaded by scrolling
-  async function ensureAllLoaded() {
-    const container = findScrollableContainer();
-    let last = 0, same = 0;
-
-    while (same < 5) {
-      container.scrollTop = container.scrollHeight;
-      await sleep(100);
-      const curr = document.querySelectorAll('.MuiBox-root.css-17amug2').length;
-      if (curr > last) {
-        last = curr;
-        same = 0;
-      } else {
-        same++;
-      }
+        document.head.appendChild(style);
     }
 
-    container.scrollTop = 0;
-    await sleep(200);
-  }
-
-  // Collect all VID and brand pairs from the page
-  function collectItems() {
-    return Array.from(document.querySelectorAll('.MuiBox-root.css-17amug2')).map(el => {
-      const vid = el.textContent.trim();
-      const box = el.closest('.MuiBox-root.css-1qm1lh');
-      const brand = box?.querySelector('h3.css-1j3qkuf')?.textContent.trim() || '—';
-      return { vid, brand };
-    });
-  }
-
-  // Build and show the popup with VID list
-  function buildPopup(items) {
-    const count = items.length;
-
-    // Modal box
-    const box = document.createElement('div');
-    box.className = 'popup-box';
-    Object.assign(box.style, {
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: 'auto',
-      minWidth: '200px',
-      maxWidth: '80vw',
-      maxHeight: '98vh',
-      padding: '20px 24px',
-      background: 'rgba(255,255,255,0.20)',
-      backdropFilter: 'blur(18px)',
-      border: '1px solid rgba(0,0,0,0.25)',
-      borderRadius: '16px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-      color: '#000',
-      fontFamily: 'Aptos, sans-serif',
-      fontSize: '14px',
-      lineHeight: '1.4',
-      overflow: 'auto',
-      whiteSpace: 'nowrap',
-      wordBreak: 'break-word',
-      zIndex: 9999999
-    });
-
-    // Header
-    const hdr = document.createElement('div');
-    hdr.textContent = `${count} ${count === 1 ? 'VID' : 'VIDs'}`;
-    hdr.style.cssText = 'font-weight:600; font-size:16px; margin-bottom:12px; text-align:center;';
-    box.appendChild(hdr);
-
-    // List entries with numbering
-    items.forEach(({ vid, brand }, index) => {
-      const line = document.createElement('div');
-      line.textContent = `${index + 1}. ${vid} – ${brand}`;
-      line.style.margin = '4px 0';
-      box.appendChild(line);
-    });
-
-    // Copy button
-    const copyBtn = createCopyButton('COPY', async () => {
-      const ids = items.map(i => i.vid).join(',');
-      const url = `https://madame.ynap.biz/shooting-validation?id=${ids}`;
-
-      // HTML: two <br> between link and numbered list
-      const html =
-        `<div style="font-family:Aptos, sans-serif; line-height:1.4;">` +
-          `<a href="${url}">Madame</a><br><br>` +
-          items.map((i, index) => `${index + 1}. ${i.vid} – ${i.brand}`).join('<br>') +
-        `</div>`;
-
-      // Plain text: two newlines between URL and numbered list
-      const listText = items.map((i, index) => `${index + 1}. ${i.vid} – ${i.brand}`).join('\n');
-      const plain = `${url}\n\n${listText}`;
-
-      try {
-        if (navigator.clipboard && navigator.clipboard.write) {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'text/html': new Blob([html], { type: 'text/html' }),
-              'text/plain': new Blob([plain], { type: 'text/plain' })
-            })
-          ]);
-        } else {
-          const listener = e => {
-            e.preventDefault();
-            e.clipboardData.setData('text/html', html);
-            e.clipboardData.setData('text/plain', plain);
-          };
-          document.addEventListener('copy', listener);
-          document.execCommand('copy');
-          document.removeEventListener('copy', listener);
+    // Find scrollable container for loading more content
+    function findScrollableContainer() {
+        for (const el of document.querySelectorAll('*')) {
+            const s = getComputedStyle(el);
+            if ((s.overflow === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+                return el;
+            }
         }
-      } catch (e) {
-        alert('Clipboard error: ' + e);
-      }
-    });
-
-    box.appendChild(copyBtn);
-    document.body.appendChild(box);
-
-    // Event handlers for closing popup
-    function remove() {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('click', onClick, true);
-      box.remove();
+        return document.documentElement;
     }
 
-    function onKey(e) {
-      if (e.key === 'Escape') remove();
+    // Ensure all VIDs are loaded by scrolling
+    async function ensureAllLoaded() {
+        const container = findScrollableContainer();
+        let last = 0, same = 0;
+
+        while (same < 5) {
+            container.scrollTop = container.scrollHeight;
+            await sleep(100);
+            const curr = document.querySelectorAll('.MuiBox-root.css-17amug2').length;
+            if (curr > last) {
+                last = curr;
+                same = 0;
+            } else {
+                same++;
+            }
+        }
+
+        container.scrollTop = 0;
+        await sleep(200);
     }
 
-    function onClick(e) {
-      if (!box.contains(e.target)) remove();
+    // Collect all VID and brand pairs from the page
+    function collectItems() {
+        return Array.from(document.querySelectorAll('.MuiBox-root.css-17amug2')).map(el => {
+            const vid = el.textContent.trim();
+            const box = el.closest('.MuiBox-root.css-1qm1lh');
+            const brand = box?.querySelector('h3.css-1j3qkuf')?.textContent.trim() || '—';
+            return { vid, brand };
+        });
     }
 
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('click', onClick, true);
-  }
+    // Build and show the popup with VID list
+    function buildPopup(items) {
+        const count = items.length;
 
-  // Main function to show the popup
-  async function showPopup() {
-    await ensureAllLoaded();
-    const items = collectItems();
-    if (!items.length) return alert('No VIDs found.');
-    items.sort((a, b) => a.brand.localeCompare(b.brand));
-    buildPopup(items);
-  }
+        // Modal box
+        const box = document.createElement('div');
+        box.className = 'popup-box';
+        Object.assign(box.style, {
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 'auto',
+            minWidth: '200px',
+            maxWidth: '80vw',
+            maxHeight: '98vh',
+            padding: '20px 24px',
+            background: 'rgba(255,255,255,0.20)',
+            backdropFilter: 'blur(18px)',
+            border: '1px solid rgba(0,0,0,0.25)',
+            borderRadius: '16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            color: '#000',
+            fontFamily: 'Aptos, sans-serif',
+            fontSize: '14px',
+            lineHeight: '1.4',
+            overflow: 'auto',
+            whiteSpace: 'nowrap',
+            wordBreak: 'break-word',
+            zIndex: 9999999
+        });
 
-  // Inject the generate button into the page
-  function injectButton() {
-    const anchor = document.querySelector('.MuiBox-root.css-70qvj9');
-    if (!anchor || document.getElementById('vid-popup-btn')) return;
+        // Header
+        const hdr = document.createElement('div');
+        hdr.textContent = `${count} ${count === 1 ? 'VID' : 'VIDs'}`;
+        hdr.style.cssText = 'font-weight:600; font-size:16px; margin-bottom:12px; text-align:center;';
+        box.appendChild(hdr);
 
-    const btn = createGenerateButton('Generate Email', showPopup);
-    btn.id = 'vid-popup-btn';
-    btn.style.marginRight = '8px';
+        // List entries with numbering
+        items.forEach(({ vid, brand }, index) => {
+            const line = document.createElement('div');
+            line.textContent = `${index + 1}. ${vid} – ${brand}`;
+            line.style.margin = '4px 0';
+            box.appendChild(line);
+        });
 
-    // Insert the button inside the css-70qvj9 container, before the "Select items to copy" button
-    anchor.insertBefore(btn, anchor.firstChild);
-  }
+        // Copy button
+        const copyBtn = createCopyButton('COPY', async () => {
+            const ids = items.map(i => i.vid).join(',');
+            const url = `https://madame.ynap.biz/shooting-validation?id=${ids}`;
 
-  // Initialize the script
-  injectFontAwesome();
-  injectStyles();
-  const root = document.querySelector('#root') || document.body;
-  new MutationObserver(injectButton).observe(root, { childList: true, subtree: true });
-  injectButton();
+            // HTML: two <br> between link and numbered list
+            const html =
+                  `<div style="font-family:Aptos, sans-serif; line-height:1.4;">` +
+                  `<a href="${url}">Madame</a><br><br>` +
+                  items.map((i, index) => `${index + 1}. ${i.vid} – ${i.brand}`).join('<br>') +
+                  `</div>`;
+
+            // Plain text: two newlines between URL and numbered list
+            const listText = items.map((i, index) => `${index + 1}. ${i.vid} – ${i.brand}`).join('\n');
+            const plain = `${url}\n\n${listText}`;
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.write) {
+                    await navigator.clipboard.write([
+                        new ClipboardItem({
+                            'text/html': new Blob([html], { type: 'text/html' }),
+                            'text/plain': new Blob([plain], { type: 'text/plain' })
+                        })
+                    ]);
+                } else {
+                    const listener = e => {
+                        e.preventDefault();
+                        e.clipboardData.setData('text/html', html);
+                        e.clipboardData.setData('text/plain', plain);
+                    };
+                    document.addEventListener('copy', listener);
+                    document.execCommand('copy');
+                    document.removeEventListener('copy', listener);
+                }
+            } catch (e) {
+                alert('Clipboard error: ' + e);
+            }
+        });
+
+        box.appendChild(copyBtn);
+        document.body.appendChild(box);
+
+        // Event handlers for closing popup
+        function remove() {
+            document.removeEventListener('keydown', onKey);
+            document.removeEventListener('click', onClick, true);
+            box.remove();
+        }
+
+        function onKey(e) {
+            if (e.key === 'Escape') remove();
+        }
+
+        function onClick(e) {
+            if (!box.contains(e.target)) remove();
+        }
+
+        document.addEventListener('keydown', onKey);
+        document.addEventListener('click', onClick, true);
+    }
+
+    // Main function to show the popup
+    async function showPopup() {
+        await ensureAllLoaded();
+        const items = collectItems();
+        if (!items.length) return alert('No VIDs found.');
+        items.sort((a, b) => a.brand.localeCompare(b.brand));
+        buildPopup(items);
+    }
+
+    // Inject the generate button into the page
+    function injectButton() {
+        const anchor = document.querySelector('.MuiBox-root.css-70qvj9');
+        if (!anchor || document.getElementById('vid-popup-btn')) return;
+
+        const btn = createGenerateButton('Generate Email', showPopup);
+        btn.id = 'vid-popup-btn';
+        btn.style.marginRight = '8px';
+
+        // Insert the button inside the css-70qvj9 container, before the "Select items to copy" button
+        anchor.insertBefore(btn, anchor.firstChild);
+    }
+
+    // Initialize the script
+    injectFontAwesome();
+    injectStyles();
+    const root = document.querySelector('#root') || document.body;
+    new MutationObserver(injectButton).observe(root, { childList: true, subtree: true });
+    injectButton();
 
 })();

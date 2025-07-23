@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PIDs
 // @namespace    https://madame.ynap.biz/
-// @version      1.9
+// @version      1.13
 // @description  - Append PIDs above VIDs on worklists
 // @description  - Auto-convert pasted PIDs into VIDs in search inputs
 // @description  - Scan barcodes to:
@@ -12,427 +12,184 @@
 // @run-at       document-end
 // ==/UserScript==
 
-(function () {
+(function() {
     'use strict';
 
-    /////////////////////
-    // PID → VID
-    /////////////////////
+    // =========================
+    // PID → VID Conversion (Global Paste)
+    // =========================
 
     function simulateReactInput(element, value) {
         if (!element) return;
-
         try {
             const prototype = element instanceof HTMLTextAreaElement
-            ? HTMLTextAreaElement.prototype
-            : HTMLInputElement.prototype;
+                ? HTMLTextAreaElement.prototype
+                : HTMLInputElement.prototype;
             const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
-
-            if (descriptor?.set) {
-                descriptor.set.call(element, value);
-            } else {
-                element.value = value;
-            }
-
+            if (descriptor?.set) descriptor.set.call(element, value);
+            else element.value = value;
             element.dispatchEvent(new Event('input', { bubbles: true }));
             element.dispatchEvent(new Event('change', { bubbles: true }));
         } catch (error) {
             console.warn('[PIDS] Input simulation failed:', error);
-            try {
-                element.value = value;
-                element.focus();
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-                element.blur();
-            } catch (fallbackError) {
-                console.error('[PIDS] All input methods failed:', fallbackError);
-            }
         }
     }
-    function extractPIDsOnly(text) {
-        // First check if the text contains any VIDs (10+ digits)
-        const vids = text.match(/\b\d{10,}\b/g);
-        if (vids && vids.length > 0) {
-            console.log('[PIDS] VIDs detected in paste, skipping conversion:', vids);
-            return null; // Don't process if VIDs are present
-        }
 
-        // Only look for PIDs if no VIDs are present
-        const pids = text.match(/\b\d{6,7}\b/g);
-        return pids?.length ? pids : null;
-    }
-
-    function productStringConvert(pidArray) {
-        return "[" + pidArray.map(p => `"${p}"`).join(",") + "]";
-    }
-
-    async function matchmakerTranslateBatch(pids, matchmakerSearch) {
-        console.log(`[PIDS] Sending ${pids.length} PIDs to matchmaker:`, pids);
+    async function matchmakerTranslateBatch(pids, endpoint) {
+        console.log('[PIDS] Batch translating PIDs:', pids);
         try {
+            const body = '[' + pids.map(p => `"${p}"`).join(',') + ']';
             const response = await fetch(
-                `https://matchmaker-api.product.ynapgroup.com/${matchmakerSearch}`, {
-                    credentials: "omit",
-                    headers: {
-                        accept: "application/json, text/plain, */*",
-                        clientid: "pidConverter",
-                        "content-type": "application/json;charset=UTF-8"
-                    },
-                    referrerPolicy: "no-referrer",
-                    body: productStringConvert(pids),
-                    method: "POST",
-                    mode: "cors"
-                });
+                `https://matchmaker-api.product.ynapgroup.com/${endpoint}`,
+                { credentials: 'omit', headers: { accept: 'application/json', clientid: 'pidConverter', 'content-type': 'application/json;charset=UTF-8' }, referrerPolicy: 'no-referrer', body, method: 'POST', mode: 'cors' }
+            );
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
-            const matches = json.matches ?? [];
-            console.log(`[PIDS] Matchmaker returned ${matches.length} matches.`);
-            return matches;
+            const vids = (json.matches || []).map(m => m.translatedId);
+            console.log(`[PIDS] Converted ${pids.length} PIDs to ${vids.length} VIDs`);
+            console.log('[PIDS] PID→VID mappings:', pids.map((p, i) => `${p}→${vids[i] || 'none'}`).join(', '));
+            return vids;
         } catch (err) {
-            console.error("[PIDS] Matchmaker fetch error:", err);
+            console.error('[PIDS] Batch translate error:', err);
             return [];
         }
     }
 
-    document.addEventListener('paste', async (e) => {
+    document.addEventListener('paste', async e => {
+        if (e.target?.id === 'search-by-id') return;
         const text = (e.clipboardData || window.clipboardData).getData('text').trim();
-
-        // First check if the text contains any VIDs (10+ digits)
-        const vids = text.match(/\b\d{10,}\b/g);
-        if (vids && vids.length > 0) {
-            console.log('[PIDS] VIDs detected in paste, allowing normal paste behavior:', vids);
-            return; // Let the normal paste behavior handle VIDs
-        }
-
-        // Only look for PIDs if no VIDs are present
+        if (text.match(/\b\d{10,}\b/)) return;
         const pids = text.match(/\b\d{6,7}\b/g);
         if (!pids) return;
-
-        console.log(`[PIDS] Pasted text detected with PIDs:`, pids);
-        const matches = await matchmakerTranslateBatch(pids, "pids");
-
-        if (matches.length > 0) {
-            e.preventDefault(); // Only prevent default for PID conversion
-
-            const vids = matches.map(m => m.translatedId);
-            console.log(`[PIDS] Successfully converted to VIDs:`, vids);
-
-            // Find the actual input element
-            let targetElement = e.target;
-            if (!targetElement.tagName || (targetElement.tagName !== 'INPUT' && targetElement.tagName !== 'TEXTAREA')) {
-                const input = targetElement.querySelector('input, textarea');
-                if (input) targetElement = input;
-            }
-
-            // Paste all VIDs at once
-            const currentValue = targetElement.value.trim();
-            const newValue = currentValue ? `${currentValue} ${vids.join(' ')}` : vids.join(' ');
-            simulateReactInput(targetElement, newValue);
-            console.log(`[PIDS] Pasted all VIDs: ${vids.join(' ')}`);
-
-        } else {
-            console.warn("[PIDS] No VID matches found for pasted PIDs.");
-            alert("No VID matches found for pasted PIDs. Please double-check at https://matchmaker.product.ynapgroup.com/");
-        }
+        console.log(`[PIDS] Global paste detected ${pids.length} PIDs`);
+        e.preventDefault();
+        const vids = await matchmakerTranslateBatch(pids, 'pids');
+        if (!vids.length) { alert('No VID matches found for pasted PIDs.'); return; }
+        let target = e.target;
+        if (!/INPUT|TEXTAREA/.test(target.tagName)) target = target.querySelector('input, textarea');
+        if (!target) return;
+        const curr = target.value.trim();
+        const newVal = curr ? `${curr} ${vids.join(' ')}` : vids.join(' ');
+        simulateReactInput(target, newVal);
+        console.log(`[PIDS] Global paste: inserted ${vids.length} VIDs`);
     }, true);
 })();
 
-(function () {
+(function() {
     'use strict';
 
-    /////////////////////
-    // PID Adder
-    /////////////////////
+    // =========================
+    // PID Adder – Prepend VIDs on Worklists
+    // =========================
 
     function injectPIDStyles() {
         const style = document.createElement('style');
-        style.textContent = `
-            .PID {
-                display: flex;
-                align-items: center;
-                font-size: 14px;
-                font-weight: bold;
-                color: rgba(0, 0, 0, 0.87);
-                line-height: 1.2;
-                margin: 0;
-            }
-        `;
+        style.textContent = `.PID { display: flex; align-items: center; font-size:14px; font-weight:bold; color: rgba(0,0,0,0.87); margin:0; }`;
         document.head.appendChild(style);
     }
 
-    function matchmakerTranslate(singleProduct, matchmakerSearch) {
-        return fetch(
-            `https://matchmaker-api.product.ynapgroup.com/${matchmakerSearch}`, {
-                credentials: 'omit',
-                headers: {
-                    accept: 'application/json, text/plain, */*',
-                    clientid: 'pidConverter',
-                    'content-type': 'application/json;charset=UTF-8',
-                },
-                referrerPolicy: 'no-referrer',
-                body: JSON.stringify(singleProduct),
-                method: 'POST',
-                mode: 'cors',
-            })
-            .then(res => res.json())
-            .then(json => {
-            const matched = json.matches;
-            if (!matched?.length) {
-                console.warn(`[PIDS] No match for`, singleProduct);
-                return null;
-            }
-            return matched[0].translatedId;
-        })
-            .catch(err => {
-            console.error('[PIDS] Matchmaker error:', err);
-            return null;
-        });
+    function matchmakerTranslate(ids, endpoint) {
+        return fetch(`https://matchmaker-api.product.ynapgroup.com/${endpoint}`, { credentials: 'omit', headers: { accept: 'application/json', clientid: 'pidConverter', 'content-type': 'application/json;charset=UTF-8' }, referrerPolicy: 'no-referrer', body: JSON.stringify(ids), method: 'POST', mode: 'cors' })
+            .then(r => r.json()).then(json => (json.matches?.[0]?.translatedId) || null)
+            .catch(err => { console.error('[PIDS] translate error:', err); return null; });
     }
 
-    function checkProduct(str) {
-        const variantMatch = str.match(/\d{10,19}/g);
-        if (variantMatch) return { ids: variantMatch, type: 'variants' };
-        const pidMatch = str.match(/\d{6,7}/g);
-        if (pidMatch) return { ids: pidMatch, type: 'pids' };
-        return null;
+    function checkProduct(text) {
+        const v = text.match(/\b\d{10,19}\b/g);
+        if (v) return { ids: v, type: 'variants' };
+        const p = text.match(/\b\d{6,7}\b/g);
+        return p ? { ids: p, type: 'pids' } : null;
     }
 
-    function prependTranslatedId(el, translatedId) {
-        const container = el.closest('.MuiBox-root.css-1y7qnee');
-        if (!container || container.querySelector('.PID')) return;
-        const pidSpan = document.createElement('span');
-        pidSpan.className = 'PID';
-        pidSpan.textContent = translatedId + ' ';
-        container.insertBefore(pidSpan, container.firstChild);
+    function prependTranslatedId(el, vid) {
+        const c = el.closest('.MuiBox-root.css-1y7qnee');
+        if (!c || c.querySelector('.PID')) return;
+        const span = document.createElement('span'); span.className = 'PID'; span.textContent = vid + ' ';
+        c.insertBefore(span, c.firstChild);
     }
 
     async function processElement(el) {
         if (el.dataset.pidAdded) return;
-        const txt = el.textContent.trim();
-        const product = checkProduct(txt);
-        if (!product) return;
-        el.dataset.pidAdded = "true";
-        const result = await matchmakerTranslate(product.ids, product.type);
-        if (result) prependTranslatedId(el, result);
+        const prod = checkProduct(el.textContent.trim());
+        if (!prod) return;
+        el.dataset.pidAdded = 'true';
+        const vid = await matchmakerTranslate(prod.ids, prod.type);
+        if (vid) prependTranslatedId(el, vid);
     }
 
     async function addPidToWorklist() {
-        const els = Array.from(document.querySelectorAll('.css-10pdxui'))
-        .filter(el => !el.dataset.pidAdded);
+        const els = [...document.querySelectorAll('.css-10pdxui')].filter(e => !e.dataset.pidAdded);
         if (!els.length) return;
         await Promise.all(els.map(processElement));
-        console.log(`[PIDS] Found ${els.length} new IDs, processed.`);
+        console.log('[PIDS] Processed', els.length, 'items');
     }
 
     function observeMutations() {
-        new MutationObserver(addPidToWorklist)
-            .observe(document.body, { childList: true, subtree: true });
-        console.log("[PIDS] MutationObserver watching worklist.");
+        new MutationObserver(addPidToWorklist).observe(document.body, { childList:true, subtree:true });
     }
+
+    // =========================
+    // Barcode Scanning & Search Paste Handling
+    // =========================
 
     let scanBuf = '', reading = false;
-
-    function isValidPage() {
-        return window.location.pathname.startsWith('/worklist/') ||
-            !!document.querySelector('#search-by-id');
-    }
+    function isValidPage() { return location.pathname.startsWith('/worklist/') || !!document.querySelector('#search-by-id'); }
 
     function handleKeyPress(e) {
         if (!isValidPage()) return;
-        if (e.key === 'Enter') {
-            if (scanBuf.length >= 5) processScan(scanBuf);
-            scanBuf = '';
-        } else if (e.key.length === 1) {
-            scanBuf += e.key;
-            if (!reading) {
-                reading = true;
-                setTimeout(() => { scanBuf = ''; reading = false; }, 250);
-            }
-        }
+        if (e.key === 'Enter') { if (scanBuf.length >= 5) processScan(scanBuf); scanBuf = ''; }
+        else if (e.key.length === 1) { scanBuf += e.key; if (!reading) { reading=true; setTimeout(() => { scanBuf=''; reading=false; }, 250); } }
     }
 
-    function handlePaste(e) {
+    async function handlePaste(e) {
         if (!isValidPage()) return;
-        const txt = (e.clipboardData || window.clipboardData).getData('text').trim();
-
-        // Don't process if it contains VIDs - let the normal paste or PID converter handle it
-        const vids = txt.match(/\b\d{10,}\b/g);
-        if (vids) {
-            console.log('[PIDS] VIDs detected in barcode scanner paste, skipping:', vids);
+        const txt = (e.clipboardData||window.clipboardData).getData('text').trim();
+        const searchInput = document.querySelector('#search-by-id');
+        if (searchInput && e.target === searchInput) {
+            if (txt.match(/\b\d{10,}\b/)) return;
+            const pids = txt.match(/\b\d{6,7}\b/g);
+            if (!pids) return;
+            console.log(`[PIDS] Search paste detected ${pids.length} PIDs`);
+            e.preventDefault();
+            const vidsAll = await Promise.all(pids.map(pid => matchmakerTranslate([pid], 'pids')));
+            console.log('[PIDS] PID→VID mappings in search:', pids.map((p,i) => `${p}→${vidsAll[i] || 'none'}`).join(', '));
+            const vids = vidsAll.filter(v => v);
+            console.log(`[PIDS] Converted ${pids.length} PIDs to ${vids.length} VIDs in search`);
+            if (!vids.length) { alert('No VID matches found for pasted PIDs.'); return; }
+            const str = vids.join(' ');
+            const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(searchInput),'value')?.set;
+            if (setter) setter.call(searchInput, str); else searchInput.value = str;
+            searchInput.dispatchEvent(new Event('input',{bubbles:true}));
+            searchInput.dispatchEvent(new Event('change',{bubbles:true}));
             return;
         }
-
-        // Only process if it looks like a PID (6-7 digits) and is long enough
-        if (txt.length >= 5 && txt.match(/^\d{6,7}$/)) {
-            processScan(txt);
-        }
+        if (/^\d{6,7}$/.test(txt)) processScan(txt);
     }
 
     async function processScan(input) {
-        // Check if input contains VIDs (10+ digits) - if so, don't process as PID
-        const vidMatch = input.match(/\b\d{10,}\b/g);
-        if (vidMatch) {
-            console.log('[PIDS] VID detected in scan, skipping PID conversion:', vidMatch);
-
-            // If we're on search page, just paste the VID directly
-            if (!window.location.pathname.startsWith('/worklist/')) {
-                const inp = document.querySelector('#search-by-id');
-                if (inp) {
-                    const setter = Object.getOwnPropertyDescriptor(
-                        Object.getPrototypeOf(inp), 'value'
-                    )?.set;
-                    if (setter) setter.call(inp, vidMatch[0]);
-                    else inp.value = vidMatch[0];
-
-                    inp.dispatchEvent(new Event('input', { bubbles: true }));
-                    inp.dispatchEvent(new Event('change', { bubbles: true }));
-                    console.log('[PIDS] ✅ Pasted VID directly:', vidMatch[0]);
-                }
-            }
-            return; // Don't continue with PID processing
-        }
-
-        // Only look for PIDs if no VIDs were found
-        const pidMatch = input.match(/\b\d{6,7}\b/g);
-        if (!pidMatch) return;
-
-        const pid = pidMatch[0]; // Take the first PID found
-        console.log('[PIDS] ▶ PID captured:', pid);
-
-        if (window.location.pathname.startsWith('/worklist/')) {
-            const vid = await matchmakerTranslate([pid], 'pids');
-            if (!vid) return console.warn('[PIDS] no VID for', pid);
-            console.log('[PIDS] ✅ VID is', vid);
-            scrollToVid(vid);
-        } else {
+        if (input.match(/\b\d{10,}\b/)) {
             const inp = document.querySelector('#search-by-id');
-            if (!inp) return;
-
-            const vid = await matchmakerTranslate([pid], 'pids');
-            if (!vid) {
-                console.warn('[PIDS] no VID for', pid);
-                return;
-            }
-
-            const setter = Object.getOwnPropertyDescriptor(
-                Object.getPrototypeOf(inp), 'value'
-            )?.set;
-            if (setter) setter.call(inp, vid);
-            else inp.value = vid;
-
-            inp.dispatchEvent(new Event('input', { bubbles: true }));
-            inp.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log('[PIDS] ✅ Converted PID to VID:', vid);
+            if (inp) { const s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(inp),'value')?.set; if (s) s.call(inp, input); else inp.value = input; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.dispatchEvent(new Event('change',{bubbles:true})); }
+            return;
         }
+        const pid = input.match(/\b\d{6,7}\b/)[0];
+        if (location.pathname.startsWith('/worklist/')) { const vid = await matchmakerTranslate([pid],'pids'); if (vid) scrollToVid(vid); }
     }
 
-    function scrollToVid(text) {
-        console.log('[PIDS] 🔍 Searching for VID:', text);
-        function attemptScroll(retry = 0) {
-            const max = 10, delay = 500;
-            document.querySelectorAll('.tampermonkey-highlight').forEach(span => {
-                try {
-                    const p = span.parentNode;
-                    p.replaceChild(document.createTextNode(span.textContent), span);
-                    p.normalize();
-                } catch {}
-            });
-            const re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
-            const selectors = ['.css-10pdxui','[class*="MuiBox"]','[class*="css-"]','div','span','td','p'];
-            let found = false;
-
-            for (const sel of selectors) {
-                if (found) break;
-                const elems = document.querySelectorAll(sel);
-                console.log(`[PIDS] Checking ${elems.length} elements with selector: ${sel}`);
-                for (const el of elems) {
-                    if (found) break;
-                    if (el.textContent.match(re)) {
-                        console.log('[PIDS] 🎯 Found VID in element:', el);
-                        highlightTextInElement(el, text, re);
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-                        setTimeout(() => {
-                            const url = `https://madame.ynap.biz/retouching/${text}`;
-                            const newTab = window.open(url, '_blank');
-                            console.log('[PIDS] 🔗 Opened retouching page:', url);
-                            if (newTab) {
-                                const chk = () => {
-                                    try {
-                                        if (newTab.document.readyState==='complete') {
-                                            const btn = newTab.document.querySelector('[data-assign-button="true"]');
-                                            if (btn) {
-                                                btn.click();
-                                                console.log('[PIDS] ✅ Auto-clicked "Assign to me"');
-                                            } else setTimeout(chk,1000);
-                                        } else setTimeout(chk,500);
-                                    } catch {
-                                        console.log('[PIDS] ℹ️ Manual assignment needed');
-                                    }
-                                };
-                                setTimeout(chk,2000);
-                            }
-                        }, 1000);
-                        found = true;
-                    }
-                }
-            }
-
-            if (!found && retry < max) {
-                console.log(`[PIDS] VID not found, retrying (${retry+1}/${max})…`);
-                setTimeout(() => attemptScroll(retry+1), delay);
-            } else if (!found) {
-                console.warn('[PIDS] ❌ VID not found after all retries');
-            } else {
-                console.log('[PIDS] ✅ Successfully scrolled to VID');
-            }
-        }
-        attemptScroll();
-    }
-
-    function highlightTextInElement(el, txt, regex) {
-        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-            acceptNode: node => {
-                if (['SCRIPT','STYLE'].includes(node.parentElement.tagName)) return NodeFilter.FILTER_REJECT;
-                return regex.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    function scrollToVid(vid) {
+        const re = new RegExp(vid,'gi');
+        document.querySelectorAll('.tampermonkey-highlight').forEach(s=>s.replaceWith(document.createTextNode(s.textContent)));
+        [...document.querySelectorAll('.css-10pdxui, [class*="MuiBox"], div, span, td, p')].some(el => {
+            if (re.test(el.textContent)) {
+                el.scrollIntoView({behavior:'smooth',block:'center'});
+                const win = window.open(`https://madame.ynap.biz/retouching/${vid}`,'_blank');
+                if (win) setTimeout(() => { try{ win.document.querySelector('[data-assign-button]')?.click(); }catch{} },2000);
+                return true;
             }
         });
-        const textNode = walker.nextNode();
-        if (textNode) {
-            const m = textNode.nodeValue.match(regex);
-            if (m) {
-                try {
-                    const r = document.createRange();
-                    r.setStart(textNode, m.index);
-                    r.setEnd(textNode, m.index + m[0].length);
-                    const span = document.createElement('span');
-                    span.style.backgroundColor = 'yellow';
-                    span.style.fontWeight = 'bold';
-                    span.style.padding = '2px';
-                    span.style.borderRadius = '3px';
-                    span.className = 'tampermonkey-highlight';
-                    r.surroundContents(span);
-                    setTimeout(() => {
-                        try {
-                            const p = span.parentNode;
-                            p.replaceChild(document.createTextNode(span.textContent), span);
-                            p.normalize();
-                        } catch {}
-                    },3000);
-                } catch (err) {
-                    console.error('[PIDS] Error highlighting:', err);
-                }
-            }
-        }
-    }
-
-    function initializeAdder() {
-        console.log("[PIDS] Initializing adder...");
-        injectPIDStyles();
-        addPidToWorklist();
-        observeMutations();
     }
 
     window.addEventListener('load', () => {
-        initializeAdder();
-        document.addEventListener('keypress', handleKeyPress);
-        document.addEventListener('paste', handlePaste);
+        injectPIDStyles(); addPidToWorklist(); observeMutations(); document.addEventListener('keypress', handleKeyPress); document.addEventListener('paste', handlePaste);
     });
 })();

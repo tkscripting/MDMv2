@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Filters
 // @namespace    http://tampermonkey.net/
-// @version      1.8.5
-// @description  Filters VIDs by name, color and priority
+// @version      1.13.3
+// @description  Filters VIDs by name, color, full VIDs, amends, and color correction (added by Freddie)
 // @match        https://madame.ynap.biz/*
 // @grant        none
 // ==/UserScript==
@@ -11,12 +11,16 @@
     'use strict';
 
     /*****************************************************************
-   *  CONSTANTS / HELPERS
-   *****************************************************************/
+     *  CONSTANTS / HELPERS
+     *****************************************************************/
     const FILTER_WRAPPER_ID = 'madame-filters-wrapper';
     const MESSAGE_ID = 'madame-filter-message';
     const worklistRootSelector =
-          '.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-mcze3t';
+        '.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-mcze3t';
+
+    // Color Matched markers - update if the site changes
+    const COLOR_MATCH_CLASS = '.css-15ub6h';
+    const COLOR_MATCH_TITLE = '[title*="Color Matched" i]';
 
     // Define US Retoucher names
     const US_RETOUCHERS = [
@@ -35,7 +39,7 @@
         'tyler knipping',
     ];
 
-    const $  = (sel, ctx = document) => ctx.querySelector(sel);
+    const $ = (sel, ctx = document) => ctx.querySelector(sel);
     const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
 
     const debounce = (fn, ms = 100) => {
@@ -64,27 +68,27 @@
 
     function toggleActiveStyle(el, isActive) {
         el.style.backgroundColor = isActive ? '#e0f7fa' : '';
-        el.style.borderColor    = isActive ? '#00796b' : '#ccc';
-        el.style.fontWeight     = isActive ? 'bold' : 'normal';
+        el.style.borderColor = isActive ? '#00796b' : '#ccc';
+        el.style.fontWeight = isActive ? 'bold' : 'normal';
     }
 
     const getOuterBoxes = () =>
-    $$('.MuiBox-root.css-0').filter((box) => {
-        let p = box.parentElement;
-        while (p) {
-            if (p.classList.contains('MuiBox-root') && p.classList.contains('css-0'))
-                return false;
-            p = p.parentElement;
-        }
-        return true;
-    });
+        $$('.MuiBox-root.css-0').filter((box) => {
+            let p = box.parentElement;
+            while (p) {
+                if (p.classList.contains('MuiBox-root') && p.classList.contains('css-0'))
+                    return false;
+                p = p.parentElement;
+            }
+            return true;
+        });
 
     /*****************************************************************
-   *  MAIN UI INJECTOR
-   *****************************************************************/
+     *  MAIN UI INJECTOR
+     *****************************************************************/
     function initButtons(container) {
         // Guard: don't double-inject
-        if ($( `#${FILTER_WRAPPER_ID}` )) return;
+        if ($(`#${FILTER_WRAPPER_ID}`)) return;
 
         console.log('[Filters] Adding filters');
 
@@ -119,25 +123,25 @@
         let personalActive = false;
         let amendsActive = false;
         let fullVidsActive = false;
-        let originalOrder  = [];
+        let notColorMatchedActive = false;
+        let originalOrder = [];
 
         /* ----------  Dropdowns  ---------- */
-        const nameDropdown  = document.createElement('select');
+        const nameDropdown = document.createElement('select');
         const colorDropdown = document.createElement('select');
         [nameDropdown, colorDropdown].forEach((dd) =>
-                                              Object.assign(dd.style, {
-            margin: '0 5px',
-            padding: '6px 10px',
-            borderRadius: '8px',
-            border: '1px solid #ccc',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-        })
-                                             );
-        nameDropdown .appendChild(new Option('All Retouchers', ''));
-        // Add US Retoucher option
-        nameDropdown .appendChild(new Option('US Retouchers', 'US_RETOUCHER'));
-        colorDropdown.appendChild(new Option('All Colors',     ''));
+            Object.assign(dd.style, {
+                margin: '0 5px',
+                padding: '6px 10px',
+                borderRadius: '8px',
+                border: '1px solid #ccc',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+            })
+        );
+        nameDropdown.appendChild(new Option('All Retouchers', ''));
+        nameDropdown.appendChild(new Option('US Retouchers', 'US_RETOUCHER'));
+        colorDropdown.appendChild(new Option('All Colors', ''));
 
         /* ----------  Message Functions  ---------- */
         function showMessage(text, type = 'info') {
@@ -165,10 +169,10 @@
             personalActive = !personalActive;
             resetDropdowns();
             toggleActiveStyle(personalBtn, personalActive);
-            amendsActive = false;
-            fullVidsActive = false;
+            amendsActive = fullVidsActive = notColorMatchedActive = false;
             toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
+            toggleActiveStyle(notColorMatchedBtn, false);
             hideMessage();
             filterRows();
         });
@@ -177,9 +181,21 @@
             amendsActive = !amendsActive;
             resetDropdowns();
             toggleActiveStyle(amendsBtn, amendsActive);
-            personalActive = false;
-            fullVidsActive = false;
+            personalActive = fullVidsActive = notColorMatchedActive = false;
             toggleActiveStyle(personalBtn, false);
+            toggleActiveStyle(fullVidsBtn, false);
+            toggleActiveStyle(notColorMatchedBtn, false);
+            hideMessage();
+            filterRows();
+        });
+
+        const notColorMatchedBtn = createButton('Not Color Matched', () => {
+            notColorMatchedActive = !notColorMatchedActive;
+            resetDropdowns();
+            toggleActiveStyle(notColorMatchedBtn, notColorMatchedActive);
+            personalActive = amendsActive = fullVidsActive = false;
+            toggleActiveStyle(personalBtn, false);
+            toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
             hideMessage();
             filterRows();
@@ -190,19 +206,21 @@
             fullVidsActive = !fullVidsActive;
 
             // 2) Clear everything else
-            personalActive   = false;
-            amendsActive     = false;
-            nameDropdown.value  = '';
+            personalActive = false;
+            amendsActive = false;
+            notColorMatchedActive = false;
+            nameDropdown.value = '';
             colorDropdown.value = '';
             toggleActiveStyle(personalBtn, false);
             toggleActiveStyle(amendsBtn, false);
+            toggleActiveStyle(notColorMatchedBtn, false);
             toggleActiveStyle(nameDropdown, false);
             toggleActiveStyle(colorDropdown, false);
             hideMessage();
 
             // 3) Reset all rows to visible before we reorder
             const boxes = getOuterBoxes();
-            boxes.forEach(b => b.style.display = '');
+            boxes.forEach((b) => (b.style.display = ''));
 
             // 4) Apply or clear the sort
             if (fullVidsActive) {
@@ -218,11 +236,12 @@
         });
 
         const resetBtn = createButton('Reset', () => {
-            personalActive = amendsActive = fullVidsActive = false;
+            personalActive = amendsActive = fullVidsActive = notColorMatchedActive = false;
             resetDropdowns();
             toggleActiveStyle(personalBtn, false);
             toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
+            toggleActiveStyle(notColorMatchedBtn, false);
             hideMessage();
             restoreOriginalOrder();
             getOuterBoxes().forEach((b) => (b.style.display = ''));
@@ -230,22 +249,21 @@
         });
 
         /* ----------  Populate dropdowns ---------- */
-        const nameSet  = new Set();
+        const nameSet = new Set();
         const colorSet = new Set();
 
         getOuterBoxes().forEach((box) => {
             if (isVideo(box)) return;
 
             // Updated selector for names - now using css-chodnj
-            box
-                .querySelectorAll('.css-chodnj[title*="Latest Retouched Author"]')
+            box.querySelectorAll('.css-chodnj[title*="Latest Retouched Author"]')
                 .forEach((el) => {
-                if (isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))) return;
-                const m = el
-                .getAttribute('title')
-                ?.match(/Latest Retouched Author\s+(.+)\s+\d/);
-                if (m?.[1]) nameSet.add(m[1].trim());
-            });
+                    if (isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))) return;
+                    const m = el
+                        .getAttribute('title')
+                        ?.match(/Latest Retouched Author\s+(.+)\s+\d/);
+                    if (m?.[1]) nameSet.add(m[1].trim());
+                });
 
             // Updated selector for colors - now using css-g82sz9
             const colorEl = box.querySelector(
@@ -262,10 +280,11 @@
             toggleActiveStyle(nameDropdown, nameDropdown.value !== '');
             toggleActiveStyle(colorDropdown, false);
             colorDropdown.value = '';
-            personalActive = amendsActive = fullVidsActive = false;
+            personalActive = amendsActive = fullVidsActive = notColorMatchedActive = false;
             toggleActiveStyle(personalBtn, false);
             toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
+            toggleActiveStyle(notColorMatchedBtn, false);
             hideMessage();
             if (nameDropdown.value !== '') {
                 filterRows();
@@ -279,10 +298,11 @@
             toggleActiveStyle(colorDropdown, colorDropdown.value !== '');
             toggleActiveStyle(nameDropdown, false);
             nameDropdown.value = '';
-            personalActive = amendsActive = fullVidsActive = false;
+            personalActive = amendsActive = fullVidsActive = notColorMatchedActive = false;
             toggleActiveStyle(personalBtn, false);
             toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
+            toggleActiveStyle(notColorMatchedBtn, false);
             hideMessage();
             if (colorDropdown.value !== '') {
                 filterRows();
@@ -296,6 +316,7 @@
         buttonContainer.append(
             personalBtn,
             amendsBtn,
+            notColorMatchedBtn,
             nameDropdown,
             colorDropdown,
             fullVidsBtn,
@@ -316,13 +337,46 @@
             return box?.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
         }
 
+        function isColorMatchedCell(cell) {
+            return !!(
+                cell.querySelector(COLOR_MATCH_CLASS) ||
+                cell.querySelector(COLOR_MATCH_TITLE)
+            );
+        }
+
+        function hasBackgroundImageDeep(root) {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+            let node = root;
+            while (node) {
+                const bg = getComputedStyle(node).backgroundImage;
+                if (bg && bg !== 'none') return true;
+                node = walker.nextNode();
+            }
+            return false;
+        }
+
+        // "Blank row" now means: NO media (img/picture/video/canvas) anywhere in any non-video cell,
+        // and NO background-image on those cells or their descendants.
+        function isBlankRow(box) {
+            const cells = $$('.MuiBox-root.css-1dcsz0a', box).filter((c) => !isVideo(c));
+            if (!cells.length) return false;
+            const anyMedia = cells.some((cell) =>
+                cell.querySelector('img, picture, video, canvas, source') ||
+                hasBackgroundImageDeep(cell)
+            );
+            return !anyMedia;
+        }
+
         // Updated filterRows function with message support
         function filterRows() {
-            const selectedName  = nameDropdown.value;
+            const selectedName = nameDropdown.value;
             const selectedColor = colorDropdown.value.toLowerCase();
 
             // Fixed username selector - use the h6 element with id="name"
-            const username = $('h6.MuiTypography-root.MuiTypography-subtitle1.MuiTypography-noWrap.css-ywpd4f#name')?.textContent.trim().toLowerCase() || '';
+            const username =
+                $(
+                    'h6.MuiTypography-root.MuiTypography-subtitle1.MuiTypography-noWrap.css-ywpd4f#name'
+                )?.textContent.trim().toLowerCase() || '';
 
             let visibleCount = 0;
 
@@ -333,11 +387,20 @@
 
                 if (personalActive) {
                     // Personal filtering - show items retouched by current user
-                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box)
-                    .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
+                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box).filter(
+                        (el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))
+                    );
                     show = spans.some((s) =>
-                                      s.getAttribute('title')?.toLowerCase().includes(username)
-                                     );
+                        s.getAttribute('title')?.toLowerCase().includes(username)
+                    );
+                } else if (notColorMatchedActive) {
+                    // Not Color Matched filtering - hide rows with any color-matched cells and blank rows
+                    const cells = $$('.MuiBox-root.css-1dcsz0a', box);
+                    const noColorMatched = cells.every((cell) =>
+                        isVideo(cell) || !isColorMatchedCell(cell)
+                    );
+                    const notBlank = !isBlankRow(box); // DEEP: removes label-only + comment-only rows
+                    show = noColorMatched && notBlank;
                 } else if (amendsActive) {
                     // Amends filtering - show items that are amends AND retouched by current user
                     show = false; // Start with false, only show if conditions are met
@@ -355,29 +418,32 @@
                         if (!hasAmend) return false;
 
                         // Check if this cell has a retouched author span with current user's name
-                        const retouchedSpan = cell.querySelector('.css-chodnj[title*="Latest Retouched Author"]');
+                        const retouchedSpan = cell.querySelector(
+                            '.css-chodnj[title*="Latest Retouched Author"]'
+                        );
                         if (!retouchedSpan) return false;
 
-                        const retouchedAuthor = retouchedSpan.getAttribute('title')?.toLowerCase() || '';
-                        const hasUsername = retouchedAuthor.includes(username);
-
-                        return hasUsername;
+                        const retouchedAuthor =
+                            retouchedSpan.getAttribute('title')?.toLowerCase() || '';
+                        return retouchedAuthor.includes(username);
                     });
                 } else if (selectedName === 'US_RETOUCHER') {
                     // Filter by US Retouchers
-                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box)
-                    .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
+                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box).filter(
+                        (el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))
+                    );
                     show = spans.some((s) => {
                         const title = s.getAttribute('title')?.toLowerCase() || '';
-                        return US_RETOUCHERS.some(usRetoucher => title.includes(usRetoucher));
+                        return US_RETOUCHERS.some((usRetoucher) => title.includes(usRetoucher));
                     });
                 } else if (selectedName) {
                     // Name filtering
-                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box)
-                    .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
+                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box).filter(
+                        (el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))
+                    );
                     show = spans.some((s) =>
-                                      s.getAttribute('title')?.toLowerCase().includes(selectedName.toLowerCase())
-                                     );
+                        s.getAttribute('title')?.toLowerCase().includes(selectedName.toLowerCase())
+                    );
                 } else if (selectedColor) {
                     // Color filtering
                     const colorEl = box.querySelector(
@@ -397,7 +463,11 @@
                 if (personalActive) {
                     showMessage("You haven't uploaded any images to this list", 'info');
                 } else if (amendsActive) {
-                    showMessage("🎉 No amends! 🎉", 'celebration');
+                    showMessage('🎉 No amends! 🎉', 'celebration');
+                } else if (notColorMatchedActive) {
+                    showMessage('Everything here is Color Matched or blank', 'info');
+                } else {
+                    hideMessage();
                 }
             } else {
                 hideMessage();
@@ -416,11 +486,13 @@
                     const tier = (box) => {
                         // Helper: does this row contain an image in a cell whose label includes <tag> ?
                         const cellHas = (tag) =>
-                        Array.from(box.querySelectorAll('.MuiBox-root.css-1dcsz0a')).some((cell) => {
-                            const txt = cell.textContent || '';
-                            const img = cell.querySelector('img');
-                            return txt.includes(tag) && img;
-                        });
+                            Array.from(box.querySelectorAll('.MuiBox-root.css-1dcsz0a')).some(
+                                (cell) => {
+                                    const txt = cell.textContent || '';
+                                    const img = cell.querySelector('img');
+                                    return txt.includes(tag) && img;
+                                }
+                            );
 
                         // Individual tag checks
                         const hasOU = cellHas('Outfit 1') || cellHas('OU');
@@ -428,23 +500,25 @@
                         const hasBK = cellHas('Back Still Life') || cellHas('BK');
 
                         /* ----------  TIER RULES  ----------
-                0 =  OU present
-                OR (BK and FR present)               // FR+BK combo, no OU
-                1 =  BK or FR present (but not Tier 0)   // single priority tag
-                2 =  some image but none of the tags
-                3 =  no images at all
-                -----------------------------------*/
-                        if (hasOU || (hasBK && hasFR))      return 0;   // top tier
-                        if (hasBK || hasFR)                 return 1;   // second tier
+                            0 =  OU present
+                                 OR (BK and FR present)               // FR+BK combo, no OU
+                            1 =  BK or FR present (but not Tier 0)   // single priority tag
+                            2 =  some image but none of the tags
+                            3 =  no images at all
+                            -----------------------------------*/
+                        if (hasOU || (hasBK && hasFR)) return 0; // top tier
+                        if (hasBK || hasFR) return 1; // second tier
                         if (box.querySelector('.MuiBox-root.css-1dcsz0a img')) return 2;
-                        return 3;                                       // bottom
+                        return 3; // bottom
                     };
                     return tier(a) - tier(b);
                 });
 
                 getOuterBoxes().forEach((b) => b.remove());
                 sorted.forEach((b) => parent.appendChild(b));
-            } else restoreOriginalOrder();
+            } else {
+                restoreOriginalOrder();
+            }
         }
 
         function restoreOriginalOrder() {
@@ -457,8 +531,8 @@
     }
 
     /*****************************************************************
-   *  OBSERVATION & RE-INJECTION
-   *****************************************************************/
+     *  OBSERVATION & RE-INJECTION
+     *****************************************************************/
     const tryInject = debounce(() => {
         const container = $(worklistRootSelector);
         if (container) initButtons(container);

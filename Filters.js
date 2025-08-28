@@ -2,7 +2,7 @@
 // @name         Filters
 // @namespace    http://tampermonkey.net/
 // @version      1.8.5
-// @description  Filter VIDs by uploads, amends, names, colors, full VIDs, and no color match
+// @description  Filters VIDs by uploads, amends, name, color, full VIDs, and color match
 // @match        https://madame.ynap.biz/*
 // @grant        none
 // ==/UserScript==
@@ -15,6 +15,7 @@
    *****************************************************************/
     const FILTER_WRAPPER_ID = 'madame-filters-wrapper';
     const MESSAGE_ID = 'madame-filter-message';
+    const PROGRESS_BAR_ID = 'no-color-match-progress-bar';
     const worklistRootSelector =
           '.MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation2.css-mcze3t';
 
@@ -116,6 +117,21 @@
             display: 'none',
         });
 
+        // Create progress bar element for "No Color Match"
+        const progressBar = document.createElement('div');
+        progressBar.id = PROGRESS_BAR_ID;
+        Object.assign(progressBar.style, {
+            marginTop: '10px',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            display: 'none',
+            color: '#c66900', // Warm orange text
+            backgroundColor: '#ffecb3', // Warm light yellow background
+            border: '1px solid #ffab00' // Warm dark orange border
+        });
+
         let personalActive = false;
         let amendsActive = false;
         let fullVidsActive = false;
@@ -161,6 +177,20 @@
             messageElement.style.display = 'none';
         }
 
+        function updateNoColorMatchProgressBar() {
+            const noColorMatchCount = getOuterBoxes().filter(box => {
+                const frontStillLifeCell = box.querySelector('.MuiBox-root.css-1dcsz0a > .MuiBox-root.css-b6m7zh span[title*="Front Still Life"]')?.parentElement?.parentElement;
+                return frontStillLifeCell && frontStillLifeCell.querySelector('.css-ikqxcw > .css-2kprcj');
+            }).length;
+
+            if (noColorMatchCount > 0) {
+                progressBar.textContent = `${noColorMatchCount} left to color match`;
+                progressBar.style.display = 'block';
+            } else {
+                progressBar.style.display = 'none';
+            }
+        }
+
         /* ----------  Buttons  ---------- */
         const personalBtn = createButton('Personal', () => {
             personalActive = !personalActive;
@@ -173,6 +203,7 @@
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             hideMessage();
+            progressBar.style.display = 'none';
             filterRows();
         });
 
@@ -187,6 +218,7 @@
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             hideMessage();
+            progressBar.style.display = 'none';
             filterRows();
         });
 
@@ -215,8 +247,10 @@
             if (noColorMatchActive) {
                 originalOrder = boxes;
                 sortRows();
+                updateNoColorMatchProgressBar();
             } else {
                 restoreOriginalOrder();
+                progressBar.style.display = 'none';
             }
 
             // 5) Toggle the button styling last
@@ -239,6 +273,7 @@
             toggleActiveStyle(nameDropdown, false);
             toggleActiveStyle(colorDropdown, false);
             hideMessage();
+            progressBar.style.display = 'none';
 
             // 3) Reset all rows to visible before we reorder
             const boxes = getOuterBoxes();
@@ -265,6 +300,7 @@
             toggleActiveStyle(noColorMatchBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
             hideMessage();
+            progressBar.style.display = 'none';
             restoreOriginalOrder();
             getOuterBoxes().forEach((b) => (b.style.display = ''));
             console.log('[Filters] Reset');
@@ -309,6 +345,7 @@
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             hideMessage();
+            progressBar.style.display = 'none';
             if (nameDropdown.value !== '') {
                 filterRows();
             } else {
@@ -327,6 +364,7 @@
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             hideMessage();
+            progressBar.style.display = 'none';
             if (colorDropdown.value !== '') {
                 filterRows();
             } else {
@@ -347,6 +385,7 @@
         );
         wrapper.appendChild(buttonContainer);
         wrapper.appendChild(messageElement);
+        wrapper.appendChild(progressBar);
         container.appendChild(wrapper);
 
         /******************** INNER HELPERS  ********************/

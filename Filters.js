@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Filters
 // @namespace    http://tampermonkey.net/
-// @version      1.8.5
-// @description  Filters VIDs by uploads, amends, name, color, full VIDs, and color match
+// @version      1.8.7
+// @description  Filters VIDs by uploads, name, color, full VIDs, and color match
 // @match        https://madame.ynap.biz/*
 // @grant        none
 // ==/UserScript==
@@ -80,6 +80,69 @@
         return true;
     });
 
+    // Clean retoucher names by removing suffixes like "- External"
+    function cleanRetoucherName(name) {
+        if (!name) return name;
+
+        // Remove common suffixes
+        return name
+            .replace(/\s*-\s*External\s*$/i, '')
+            .replace(/\s*-\s*Internal\s*$/i, '')
+            .replace(/\s*-\s*Ext\s*$/i, '')
+            .replace(/\s*-\s*Int\s*$/i, '')
+            .trim();
+    }
+
+    // Wait for content to load before extracting names
+    function waitForContent(callback, maxAttempts = 15) {
+        let attempts = 0;
+        let previousProductCount = 0;
+        let stableChecks = 0;
+
+        function checkForContent() {
+            attempts++;
+            const productBoxes = getOuterBoxes();
+            const totalProducts = productBoxes.length;
+
+            // Count how many products have retoucher data
+            let productsWithRetouchers = 0;
+            productBoxes.forEach(box => {
+                const retoucherSpans = box.querySelectorAll('span[title*="Latest Retouched Author"]');
+                if (retoucherSpans.length > 0) {
+                    productsWithRetouchers++;
+                }
+            });
+
+            const completionPercentage = totalProducts > 0 ? (productsWithRetouchers / totalProducts) * 100 : 0;
+
+            console.log(`[Filters] Attempt ${attempts}: ${totalProducts} products, ${productsWithRetouchers} with retoucher data (${completionPercentage.toFixed(1)}%)`);
+
+            // Check if product count has stabilized (same count for 2 consecutive checks)
+            if (totalProducts === previousProductCount) {
+                stableChecks++;
+            } else {
+                stableChecks = 0;
+            }
+            previousProductCount = totalProducts;
+
+            // Proceed if:
+            // 1. We have a good completion rate (80%+) AND product count is stable, OR
+            // 2. We have some retouchers and have reached max attempts
+            const shouldProceed = (completionPercentage >= 80 && stableChecks >= 2) ||
+                                  (attempts >= maxAttempts && productsWithRetouchers > 0);
+
+            if (shouldProceed) {
+                console.log(`[Filters] Content loading complete! Proceeding with ${productsWithRetouchers}/${totalProducts} products loaded.`);
+                callback();
+            } else {
+                console.log(`[Filters] Waiting... (stable checks: ${stableChecks}, completion: ${completionPercentage.toFixed(1)}%)`);
+                setTimeout(checkForContent, 1500); // Slightly longer delay
+            }
+        }
+
+        checkForContent();
+    }
+
     /*****************************************************************
    * MAIN UI INJECTOR
    *****************************************************************/
@@ -132,8 +195,6 @@
             border: '1px solid #ffab00' // Warm dark orange border
         });
 
-        let personalActive = false;
-        let amendsActive = false;
         let fullVidsActive = false;
         let noColorMatchActive = false;
         let originalOrder  = [];
@@ -151,9 +212,7 @@
             transition: 'all 0.2s ease',
         })
                                              );
-        nameDropdown .appendChild(new Option('All Retouchers', ''));
-        // Add US Retoucher option
-        nameDropdown .appendChild(new Option('US Retouchers', 'US_RETOUCHER'));
+        nameDropdown .appendChild(new Option('Loading...', ''));
         colorDropdown.appendChild(new Option('All Colors',     ''));
 
         /* ----------  Message Functions  ---------- */
@@ -192,48 +251,14 @@
         }
 
         /* ----------  Buttons  ---------- */
-        const personalBtn = createButton('Personal', () => {
-            personalActive = !personalActive;
-            resetDropdowns();
-            toggleActiveStyle(personalBtn, personalActive);
-            amendsActive = false;
-            fullVidsActive = false;
-            noColorMatchActive = false;
-            toggleActiveStyle(amendsBtn, false);
-            toggleActiveStyle(fullVidsBtn, false);
-            toggleActiveStyle(noColorMatchBtn, false);
-            hideMessage();
-            progressBar.style.display = 'none';
-            filterRows();
-        });
-
-        const amendsBtn = createButton('Amends', () => {
-            amendsActive = !amendsActive;
-            resetDropdowns();
-            toggleActiveStyle(amendsBtn, amendsActive);
-            personalActive = false;
-            fullVidsActive = false;
-            noColorMatchActive = false;
-            toggleActiveStyle(personalBtn, false);
-            toggleActiveStyle(fullVidsBtn, false);
-            toggleActiveStyle(noColorMatchBtn, false);
-            hideMessage();
-            progressBar.style.display = 'none';
-            filterRows();
-        });
-
         const noColorMatchBtn = createButton('No Color Match', () => {
             // 1) Flip the no-color-match flag
             noColorMatchActive = !noColorMatchActive;
 
             // 2) Clear everything else
-            personalActive   = false;
-            amendsActive     = false;
             fullVidsActive   = false;
             nameDropdown.value  = '';
             colorDropdown.value = '';
-            toggleActiveStyle(personalBtn, false);
-            toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(nameDropdown, false);
             toggleActiveStyle(colorDropdown, false);
@@ -262,13 +287,9 @@
             fullVidsActive = !fullVidsActive;
 
             // 2) Clear everything else
-            personalActive   = false;
-            amendsActive     = false;
             noColorMatchActive = false;
             nameDropdown.value  = '';
             colorDropdown.value = '';
-            toggleActiveStyle(personalBtn, false);
-            toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             toggleActiveStyle(nameDropdown, false);
             toggleActiveStyle(colorDropdown, false);
@@ -293,10 +314,8 @@
         });
 
         const resetBtn = createButton('Reset', () => {
-            personalActive = amendsActive = fullVidsActive = noColorMatchActive = false;
+            fullVidsActive = noColorMatchActive = false;
             resetDropdowns();
-            toggleActiveStyle(personalBtn, false);
-            toggleActiveStyle(amendsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             toggleActiveStyle(fullVidsBtn, false);
             hideMessage();
@@ -306,42 +325,56 @@
             console.log('[Filters] Reset');
         });
 
-        /* ----------  Populate dropdowns ---------- */
-        const nameSet  = new Set();
-        const colorSet = new Set();
+        /* ----------  Wait for content then populate dropdowns ---------- */
+        waitForContent(() => {
+            const nameSet  = new Set();
+            const colorSet = new Set();
 
-        getOuterBoxes().forEach((box) => {
-            if (isVideo(box)) return;
+            getOuterBoxes().forEach((box) => {
+                if (isVideo(box)) return;
 
-            // Updated selector for names - now using css-chodnj
-            box
-                .querySelectorAll('.css-chodnj[title*="Latest Retouched Author"]')
-                .forEach((el) => {
-                if (isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))) return;
-                const m = el
-                .getAttribute('title')
-                ?.match(/Latest Retouched Author\s+(.+)\s+\d/);
-                if (m?.[1]) nameSet.add(m[1].trim());
+                // Extract retoucher names using the corrected newline format
+                box.querySelectorAll('span[title*="Latest Retouched Author"]')
+                    .forEach((el) => {
+                        if (isVideo(el.closest('.MuiBox-root.css-1dcsz0a'))) return;
+                        const title = el.getAttribute('title');
+                        if (title) {
+                            // Split by newlines and get the name (second line)
+                            const lines = title.split('\n');
+                            if (lines.length >= 2) {
+                                const rawName = lines[1].trim();
+                                const cleanName = cleanRetoucherName(rawName);
+                                if (cleanName && cleanName !== '') {
+                                    nameSet.add(cleanName);
+                                }
+                            }
+                        }
+                    });
+
+                // Extract colors
+                const colorEl = box.querySelector(
+                    '.MuiTypography-root.MuiTypography-body2.css-g82sz9'
+                );
+                if (colorEl) colorSet.add(colorEl.textContent.trim());
             });
 
-            // Updated selector for colors - now using css-g82sz9
-            const colorEl = box.querySelector(
-                '.MuiTypography-root.MuiTypography-body2.css-g82sz9'
-            );
-            if (colorEl) colorSet.add(colorEl.textContent.trim());
-        });
+            // Clear loading text and populate dropdowns
+            nameDropdown.innerHTML = '';
+            nameDropdown.appendChild(new Option('All Retouchers', ''));
+            nameDropdown.appendChild(new Option('US Retouchers', 'US_RETOUCHER'));
 
-        [...nameSet].sort().forEach((n) => nameDropdown.add(new Option(n, n)));
-        [...colorSet].sort().forEach((c) => colorDropdown.add(new Option(c, c)));
+            [...nameSet].sort().forEach((n) => nameDropdown.add(new Option(n, n)));
+            [...colorSet].sort().forEach((c) => colorDropdown.add(new Option(c, c)));
+
+            console.log('[Filters] Populated dropdowns with names:', [...nameSet].sort());
+        });
 
         /* ----------  Event wiring ---------- */
         nameDropdown.addEventListener('change', () => {
             toggleActiveStyle(nameDropdown, nameDropdown.value !== '');
             toggleActiveStyle(colorDropdown, false);
             colorDropdown.value = '';
-            personalActive = amendsActive = fullVidsActive = noColorMatchActive = false;
-            toggleActiveStyle(personalBtn, false);
-            toggleActiveStyle(amendsBtn, false);
+            fullVidsActive = noColorMatchActive = false;
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             hideMessage();
@@ -358,9 +391,7 @@
             toggleActiveStyle(colorDropdown, colorDropdown.value !== '');
             toggleActiveStyle(nameDropdown, false);
             nameDropdown.value = '';
-            personalActive = amendsActive = fullVidsActive = noColorMatchActive = false;
-            toggleActiveStyle(personalBtn, false);
-            toggleActiveStyle(amendsBtn, false);
+            fullVidsActive = noColorMatchActive = false;
             toggleActiveStyle(fullVidsBtn, false);
             toggleActiveStyle(noColorMatchBtn, false);
             hideMessage();
@@ -375,8 +406,6 @@
 
         /* ----------  Assemble wrapper ---------- */
         buttonContainer.append(
-            personalBtn,
-            amendsBtn,
             nameDropdown,
             colorDropdown,
             fullVidsBtn,
@@ -399,13 +428,10 @@
             return box?.querySelector('.css-b6m7zh')?.textContent.trim() === 'Video';
         }
 
-        // Updated filterRows function with message support
+        // Updated filterRows function with corrected name extraction
         function filterRows() {
             const selectedName  = nameDropdown.value;
             const selectedColor = colorDropdown.value.toLowerCase();
-
-            // Fixed username selector - use the h6 element with id="name"
-            const username = $('h6.MuiTypography-root.MuiTypography-subtitle1.MuiTypography-noWrap.css-ywpd4f#name')?.textContent.trim().toLowerCase() || '';
 
             let visibleCount = 0;
 
@@ -414,53 +440,40 @@
 
                 let show = true;
 
-                if (personalActive) {
-                    // Personal filtering - show items retouched by current user
-                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box)
-                    .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
-                    show = spans.some((s) =>
-                                      s.getAttribute('title')?.toLowerCase().includes(username)
-                                     );
-                } else if (amendsActive) {
-                    // Amends filtering - show items that are amends AND retouched by current user
-                    show = false; // Start with false, only show if conditions are met
-
-                    // Find all cells in this row
-                    const cells = $$('.MuiBox-root.css-1dcsz0a', box);
-
-                    // Check each cell for amends by current user
-                    show = cells.some((cell) => {
-                        // Skip video cells
-                        if (isVideo(cell)) return false;
-
-                        // Check if this cell has an amend marker
-                        const hasAmend = cell.querySelector('.css-1gl1v3l');
-                        if (!hasAmend) return false;
-
-                        // Check if this cell has a retouched author span with current user's name
-                        const retouchedSpan = cell.querySelector('.css-chodnj[title*="Latest Retouched Author"]');
-                        if (!retouchedSpan) return false;
-
-                        const retouchedAuthor = retouchedSpan.getAttribute('title')?.toLowerCase() || '';
-                        const hasUsername = retouchedAuthor.includes(username);
-
-                        return hasUsername;
-                    });
-                } else if (selectedName === 'US_RETOUCHER') {
-                    // Filter by US Retouchers
-                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box)
-                    .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
+                if (selectedName === 'US_RETOUCHER') {
+                    // Filter by US Retouchers using corrected format
+                    const spans = $('span[title*="Latest Retouched Author"]', box)
+                        .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
                     show = spans.some((s) => {
-                        const title = s.getAttribute('title')?.toLowerCase() || '';
-                        return US_RETOUCHERS.some(usRetoucher => title.includes(usRetoucher));
+                        const title = s.getAttribute('title');
+                        if (title) {
+                            const lines = title.split('\n');
+                            if (lines.length >= 2) {
+                                const rawName = lines[1].trim();
+                                const cleanName = cleanRetoucherName(rawName).toLowerCase();
+                                return US_RETOUCHERS.some(usRetoucher =>
+                                    cleanName.includes(usRetoucher) || usRetoucher.includes(cleanName)
+                                );
+                            }
+                        }
+                        return false;
                     });
                 } else if (selectedName) {
-                    // Name filtering
-                    const spans = $$('.css-chodnj[title*="Latest Retouched Author"]', box)
-                    .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
-                    show = spans.some((s) =>
-                                      s.getAttribute('title')?.toLowerCase().includes(selectedName.toLowerCase())
-                                     );
+                    // Individual name filtering using corrected format
+                    const spans = $('span[title*="Latest Retouched Author"]', box)
+                        .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
+                    show = spans.some((s) => {
+                        const title = s.getAttribute('title');
+                        if (title) {
+                            const lines = title.split('\n');
+                            if (lines.length >= 2) {
+                                const rawName = lines[1].trim();
+                                const cleanName = cleanRetoucherName(rawName).toLowerCase();
+                                return cleanName.includes(selectedName.toLowerCase());
+                            }
+                        }
+                        return false;
+                    });
                 } else if (selectedColor) {
                     // Color filtering
                     const colorEl = box.querySelector(
@@ -474,17 +487,6 @@
                 box.style.display = show ? '' : 'none';
                 if (show) visibleCount++;
             });
-
-            // Show messages when no results found
-            if (visibleCount === 0) {
-                if (personalActive) {
-                    showMessage("You haven't uploaded any images to this list", 'info');
-                } else if (amendsActive) {
-                    showMessage("🎉 No amends! 🎉", 'celebration');
-                }
-            } else {
-                hideMessage();
-            }
         }
 
         function sortRows() {

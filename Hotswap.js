@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Hotswap
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  Conveniently switch between brands
 // @match        https://madame.ynap.biz/*
 // @grant        none
@@ -32,8 +32,8 @@
                     const brandText = brandElement.textContent.trim();
                     console.log('🏷️ Detected brand:', brandText);
 
-                    // Click settings button
-                    const settingsBtn = document.querySelector('.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-colorInherit.MuiIconButton-sizeMedium.css-rjyr8w');
+                    // Click settings button - UPDATED CLASS
+                    const settingsBtn = document.querySelector('.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-colorInherit.MuiIconButton-sizeMedium.css-v5gbz4');
                     if (settingsBtn) {
                         settingsBtn.click();
                         console.log('⚙️ Clicked settings button');

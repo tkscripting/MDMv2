@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Match
+// @name         Match - Combined (Comments & Filtering)
 // @namespace    http://tampermonkey.net/
-// @version      3.3
-// @description  Color matching with comments and filtering by color matches
+// @version      3.4
+// @description  Color matching with comments and filtering by color matches - with check order tracking and dynamic channel detection
 // @match        https://madame.ynap.biz/worklist/*
 // @grant        none
 // ==/UserScript==
@@ -304,7 +304,7 @@
         const selectedProducts = getSelectedProducts();
 
         if (selectedProducts.length < 2) {
-            alert('Please select at least 2 products for color matching.');
+            console.warn('⚠️ Please select at least 2 products for color matching.');
             return;
         }
 
@@ -334,11 +334,10 @@
                 delete cb.dataset.checkOrder; // Clear the order
             });
 
-            alert(`Color matching complete! Comments added to ${selectedProducts.length} products.`);
+            console.log(`✅ Color matching complete! Comments added to ${selectedProducts.length} products.`);
 
         } catch (error) {
             console.error('Error during color matching:', error);
-            alert('Error occurred during color matching.');
         } finally {
             button.innerHTML = originalText;
             button.disabled = false;
@@ -789,11 +788,8 @@
             console.log(`✅ Complete! ${groups.length} groups, ${unmatched.length} unmatched products`);
             console.log('═'.repeat(60));
 
-            alert(`✅ Filtering complete!\n\n${groups.length} matching groups reorganized.\nCheck console for details.`);
-
         } catch (error) {
             console.error('❌ ERROR during color filtering:', error);
-            alert(`❌ Error: ${error.message}\n\nCheck console for details.`);
         } finally {
             filterButton.innerHTML = originalText;
             filterButton.disabled = false;

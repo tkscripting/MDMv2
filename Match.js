@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Match - Combined (Comments & Filtering)
+// @name         Match
 // @namespace    http://tampermonkey.net/
 // @version      3.4
-// @description  Color matching with comments and filtering by color matches - with check order tracking and dynamic channel detection
+// @description  Color matching with comments and filtering by color matches
 // @match        https://madame.ynap.biz/worklist/*
 // @grant        none
 // ==/UserScript==

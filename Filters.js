@@ -442,7 +442,7 @@
 
                 if (selectedName === 'US_RETOUCHER') {
                     // Filter by US Retouchers using corrected format
-                    const spans = $('span[title*="Latest Retouched Author"]', box)
+                    const spans = $$('span[title*="Latest Retouched Author"]', box)
                         .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
                     show = spans.some((s) => {
                         const title = s.getAttribute('title');
@@ -460,7 +460,7 @@
                     });
                 } else if (selectedName) {
                     // Individual name filtering using corrected format
-                    const spans = $('span[title*="Latest Retouched Author"]', box)
+                    const spans = $$('span[title*="Latest Retouched Author"]', box)
                         .filter((el) => !isVideo(el.closest('.MuiBox-root.css-1dcsz0a')));
                     show = spans.some((s) => {
                         const title = s.getAttribute('title');
